@@ -50,6 +50,12 @@ class OFAGenotypeModel(FinalModel):
 
     def forward(self, inputs):
         return self.backbone(inputs)
+    
+    def load_state_dict(self, model, strict=True):
+        try:
+            return self.load_state_dict(model, strict)
+        except:
+            return self.backbone.load_state_dict(model, strict)
 
     def load_ofa_state_dict(self, ofa_state_dict, strict=True):
         """
@@ -57,8 +63,8 @@ class OFAGenotypeModel(FinalModel):
         """
         flexible_backbone = BaseBackboneArch.get_class_(self.backbone_type)(
             device=self.device, channels=self.layer_channels, kernel_sizes=self.kernel_sizes,
-            mult_ratio=self.mult_ratio)
-        if ofa_state_dict:
+            mult_ratio=self.mult_ratio, num_classes=self.num_classes)
+        if ofa_state_dict is not None:
             state_dict = torch.load(ofa_state_dict, map_location="cpu")
             state_dict = state_dict.get("weights_manager", state_dict)
             flexible_backbone.load_state_dict(state_dict, strict=strict)

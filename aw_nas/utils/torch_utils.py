@@ -653,3 +653,13 @@ def count_parameters(model):
 
 def to_device(datas, device):
     return [data.to(device) for data in datas]
+
+def weights_init(m):
+    if isinstance(m, torch.nn.Conv2d):
+        torch.nn.init.kaiming_uniform_(m.weight.data)
+        if m.bias is not None:
+            torch.nn.init.constant_(m.bias.data, 0)
+    elif isinstance(m, torch.nn.Linear):
+        m.weight.data.normal_(0, 0.01)
+        if m.bias is not None:
+            m.bias.data.zero_()
