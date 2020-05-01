@@ -6,6 +6,7 @@ NN operations.
 import numpy as np
 import torch
 import torch.nn.functional as F
+import torch.nn.init as init
 from collections import OrderedDict
 from aw_nas.utils.common_utils import get_sub_kernel, make_divisible, _get_channel_mask
 from aw_nas.utils.exception import ConfigException, expect
@@ -534,9 +535,10 @@ class FlexibleLayer(object):
 
 
 class FlexiblePointLinear(nn.Conv2d, FlexibleLayer):
-    def __init__(self, in_channels, out_channels, kernel_size=1, stride=1, padding=0, dilation=1):
-        super(FlexiblePointLinear, self).__init__(in_channels, out_channels, kernel_size, stride, padding, dilation, groups=1, bias=False)
+    def __init__(self, in_channels, out_channels, kernel_size=1, stride=1, padding=0, dilation=1, bias=False):
+        super(FlexiblePointLinear, self).__init__(in_channels, out_channels, kernel_size, stride, padding, dilation, groups=1, bias=bias)
         FlexibleLayer.__init__(self)
+        self._bias = bias
 
     def _select_params(self, in_mask=None, out_mask=None):
         if in_mask is None and out_mask is None:
@@ -571,23 +573,24 @@ class FlexiblePointLinear(nn.Conv2d, FlexibleLayer):
         C_out, C_in, H, W = weight.shape
         assert H == W
         padding = H // 2
-        final_conv = nn.Conv2d(C_in, C_out, H, stride=self.stride, padding=padding, bias=False)
+        final_conv = nn.Conv2d(C_in, C_out, H, stride=self.stride, padding=padding, bias=self._bias)
         final_conv.weight.data.copy_(weight)
         return final_conv
 
 class FlexibleDepthWiseConv(nn.Conv2d, FlexibleLayer):
-    def __init__(self, in_channels, kernel_sizes, stride=1, dilation=1, do_kernel_transform=True):
+    def __init__(self, in_channels, kernel_sizes, stride=1, dilation=1, do_kernel_transform=True, bias=False):
         assert isinstance(kernel_sizes, (list, tuple))
         kernel_sizes = sorted(kernel_sizes)
         self.kernel_sizes = kernel_sizes
         self.max_kernel_size = kernel_sizes[-1]
         self.do_kernel_transform = do_kernel_transform
-        super(FlexibleDepthWiseConv, self).__init__(in_channels, in_channels, self.max_kernel_size, stride, dilation=dilation, groups=in_channels, bias=False)
+        super(FlexibleDepthWiseConv, self).__init__(in_channels, in_channels, self.max_kernel_size, stride, dilation=dilation, groups=in_channels, bias=bias)
         if self.do_kernel_transform:
             self.linear_7to5 = nn.Linear(5 * 5, 5 * 5)
             self.linear_5to3 = nn.Linear(3 * 3, 3 * 3)
 
         FlexibleLayer.__init__(self)
+        self._bias = bias
         
     def _select_channels(self, mask):
         return self.weight[mask, :, :, :].contiguous()
@@ -645,7 +648,7 @@ class FlexibleDepthWiseConv(nn.Conv2d, FlexibleLayer):
         weight = self._select_params(self.mask, self._kernel_size)
         C, _, _, _ = weight.shape
         padding = self._kernel_size // 2
-        final_conv = nn.Conv2d(C, C, self._kernel_size, stride=self.stride, padding=padding, groups=C, bias=False)
+        final_conv = nn.Conv2d(C, C, self._kernel_size, stride=self.stride, padding=padding, groups=C, bias=self._bias)
         final_conv.weight.data.copy_(weight)
         return final_conv
 
@@ -717,9 +720,9 @@ class SEModule(nn.Module):
         mid_channel = make_divisible(channel // reduction, 8)
 
         self.se = nn.Sequential(OrderedDict([
-            ("reduction", reduction_layer or nn.Conv2d(self.channel, mid_channel, 1, 1, 0, bias=False)),
+            ("reduction", reduction_layer or nn.Conv2d(self.channel, mid_channel, 1, 1, 0)),
             ("relu", nn.ReLU(inplace=True)),
-            ("expand", expand_layer or nn.Conv2d(mid_channel, self.channel, 1, 1, 0, bias=False)),
+            ("expand", expand_layer or nn.Conv2d(mid_channel, self.channel, 1, 1, 0)),
             ("activation", get_op("h_sigmoid")(inplace=True))
         ]))
 
@@ -732,8 +735,8 @@ class SEModule(nn.Module):
 class FlexibleSEModule(SEModule, FlexibleLayer):
     def __init__(self, channel, reduction=4):
         mid_channel = make_divisible(channel // reduction, 8)
-        reduction_layer = FlexiblePointLinear(channel, mid_channel, 1, 1, 0)
-        expand_layer = FlexiblePointLinear(mid_channel, channel, 1, 1, 0)
+        reduction_layer = FlexiblePointLinear(channel, mid_channel, 1, 1, 0, bias=True)
+        expand_layer = FlexiblePointLinear(mid_channel, channel, 1, 1, 0, bias=True)
         super(FlexibleSEModule, self).__init__(channel, reduction, reduction_layer, expand_layer)
         FlexibleLayer.__init__(self)
 
@@ -760,3 +763,22 @@ class FlexibleSEModule(SEModule, FlexibleLayer):
         expand_layer = self.se.expand.finalize()
         return SEModule(self.channel, self.reduction, reduction_layer, expand_layer)
         
+
+class L2Norm(nn.Module):
+    def __init__(self,n_channels, scale):
+        super(L2Norm,self).__init__()
+        self.n_channels = n_channels
+        self.gamma = scale or None
+        self.eps = 1e-10
+        self.weight = nn.Parameter(torch.Tensor(self.n_channels))
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        init.constant(self.weight,self.gamma)
+
+    def forward(self, x):
+        norm = x.pow(2).sum(dim=1, keepdim=True).sqrt()+self.eps
+        #x /= norm
+        x = torch.div(x,norm)
+        out = self.weight.unsqueeze(0).unsqueeze(2).unsqueeze(3).expand_as(x) * x
+        return out

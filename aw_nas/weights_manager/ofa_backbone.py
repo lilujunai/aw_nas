@@ -91,16 +91,17 @@ class FlexibleMobileNetV2Block(MobileNetV2Block, FlexibleBlock):
         self.reset_mask()
 
     def set_mask(self, expansion, kernel_size):
+        mask = None
         if expansion != self.expansion:
             filters = self.point_linear[0].weight.data
             mask = _get_channel_mask(filters, self.C * expansion)
-            if self.inv_bottleneck:
-                self.inv_bottleneck[0].set_mask(None, mask)
-                self.inv_bottleneck[1].set_mask(None, mask)
+        if self.inv_bottleneck:
+            self.inv_bottleneck[0].set_mask(None, mask)
+            self.inv_bottleneck[1].set_mask(mask)
 
-            self.depth_wise[0].set_mask(mask, kernel_size)
-            self.depth_wise[1].set_mask(mask, kernel_size)
-            self.point_linear[0].set_mask(mask, None)
+        self.depth_wise[0].set_mask(mask, kernel_size)
+        self.depth_wise[1].set_mask(mask)
+        self.point_linear[0].set_mask(mask, None)
 
     def forward_rollout(self, inputs, expansion, kernel_size):
         self.set_mask(expansion, kernel_size)
@@ -207,6 +208,7 @@ class FlexibleMobileNetV3Block(MobileNetV3Block, FlexibleBlock):
             C_out,
             stride,
             self.kernel_size,
+            affine,
             activation,
             use_se,
             inv_bottleneck,
@@ -217,17 +219,18 @@ class FlexibleMobileNetV3Block(MobileNetV3Block, FlexibleBlock):
         self.reset_mask()
 
     def set_mask(self, expansion, kernel_size):
+        mask = None
         if expansion != self.expansion:
             filters = self.point_linear[0].weight.data
             mask = _get_channel_mask(filters, self.C * expansion)
-            if self.inv_bottleneck:
-                self.inv_bottleneck[0].set_mask(None, mask)
-                self.inv_bottleneck[1].set_mask(mask)
-            self.depth_wise[0].set_mask(mask, kernel_size)
-            self.depth_wise[1].set_mask(mask)
-            self.point_linear[0].set_mask(mask, None)
-            if self.se:
-                self.se.set_mask(mask)
+        if self.inv_bottleneck:
+            self.inv_bottleneck[0].set_mask(None, mask)
+            self.inv_bottleneck[1].set_mask(mask)
+        self.depth_wise[0].set_mask(mask, kernel_size)
+        self.depth_wise[1].set_mask(mask)
+        self.point_linear[0].set_mask(mask, None)
+        if self.se:
+            self.se.set_mask(mask)
 
     def forward_rollout(self, inputs, expansion, kernel_size):
         self.set_mask(expansion, kernel_size)
@@ -383,7 +386,7 @@ class MobileNetV2Arch(BaseBackboneArch):
                 )
             )
         self.cells = nn.ModuleList(self.cells)
-        self.conv_head = nn.Sequential(
+        self.conv_final = nn.Sequential(
             FlexiblePointLinear(self.channels[-2], self.channels[-1], 1, 1, 0),
             nn.BatchNorm2d(self.channels[-1]),
         )
@@ -407,7 +410,7 @@ class MobileNetV2Arch(BaseBackboneArch):
                     s,
                     kernel_sizes,
                     self.do_kernel_transform,
-                    "relu",
+                    activation="relu",
                     affine=True,
                 )
             )
@@ -429,7 +432,7 @@ class MobileNetV2Arch(BaseBackboneArch):
                         out, rollout.width[i][j], rollout.kernel[i][j]
                     )
 
-        out = self.conv_head(out)
+        out = self.conv_final(out)
         out = F.adaptive_avg_pool2d(out, 1)
         return self.classifier(out).flatten(1)
 
@@ -555,7 +558,7 @@ class MobileNetV3Arch(BaseBackboneArch):
                     s,
                     kernel_sizes,
                     self.do_kernel_transform,
-                    act,
+                    activation=act,
                     affine=True,
                     use_se=use_se,
                 )

@@ -2,7 +2,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from aw_nas.ops import register_primitive, ConvBNReLU, Identity, SEModule, get_op
-
+from aw_nas.utils import make_divisible
 class VggBlock(nn.Module):
     def __init__(self, C, C_out, stride, affine):
         super(VggBlock, self).__init__()
@@ -299,7 +299,7 @@ class MobileNetV2Block(nn.Module):
         self.expansion = expansion
         self.C = C
         self.C_out = C_out 
-        self.C_inner = C * expansion
+        self.C_inner = make_divisible(C * expansion, 8)
         self.stride = stride
         self.kernel_size = kernel_size
         self.act_fn = get_op(activation)
@@ -401,7 +401,7 @@ class MobileNetV3Block(nn.Module):
         if self.se:
             out = self.se(out)
         out = self.point_linear(out)
-        if self.shortcut:
+        if self.shortcut is not None:
             out = out + self.shortcut(inputs)
         return out
 
