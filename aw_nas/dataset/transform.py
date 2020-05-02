@@ -38,10 +38,7 @@ class TargetTransform(object):
         self.threshold = iou_threshold
         self.variance = variance
 
-    def __call__(self, target, width, height):
-        boxes, labels = target
-        # boxes[:, ::2] = boxes[:, ::2] / width
-        # boxes[:, 1::2] = boxes[:, 1::2] / height
+    def __call__(self, boxes, labels):
 
         num_priors = self.priors.size(0)
         loc_t = torch.Tensor(1, num_priors, 4)

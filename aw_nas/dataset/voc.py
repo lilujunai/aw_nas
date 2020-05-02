@@ -85,7 +85,7 @@ class VOCDataset(object):
             image, boxes, labels = self.transform(image, boxes, labels)
 
         if self.target_transform is not None:
-            (boxes, labels) = self.target_transform((boxes, labels), width, height)
+            (boxes, labels) = self.target_transform(boxes, labels)
         target = (boxes, labels)
         return torch.tensor(image), target, height, width
 
