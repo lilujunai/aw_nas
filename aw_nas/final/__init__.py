@@ -13,4 +13,4 @@ from .ofa_trainer import OFAFinalTrainer
 from .general_model import GeneralGenotypeModel
 
 from .ssd_model import SSDFinalModel, SSDHeadModel
-from .ssd_trainer import SSDFinalTrainer
+from .det_trainer import DetectionFinalTrainer

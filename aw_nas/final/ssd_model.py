@@ -53,7 +53,7 @@ def generate_headers(num_classes, feature_channels, expansions=[0.2, 0.25, 0.5, 
 
 
 class PredictModel(nn.Module):
-    def __init__(self, num_classes, background_label, top_k=200, confidence_thresh=0.01, nms_thresh=0.45, variance=(0.1, 0.2)):
+    def __init__(self, num_classes, background_label, top_k=200, confidence_thresh=0.01, nms_thresh=0.5, variance=(0.1, 0.2), priors=None):
         super(PredictModel, self).__init__()
         self.num_classes = num_classes
         self.background_label = background_label
@@ -61,8 +61,10 @@ class PredictModel(nn.Module):
         self.confidence_thresh = confidence_thresh
         self.nms_thresh = nms_thresh
         self.variance = variance
+        self.priors = priors
 
-    def forward(self, confidences, locations, priors):
+    def forward(self, confidences, locations):
+        priors = self.priors.to(confidences.device)
         num = confidences.size(0)  # batch size
         num_priors = priors.size(0)
         output = torch.zeros(num, self.num_classes, self.top_k, 5)
