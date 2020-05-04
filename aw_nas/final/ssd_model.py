@@ -12,15 +12,19 @@ import numpy as np
 import six
 import torch
 import torch.nn.functional as F
+
+from torch import nn
+
 from aw_nas import ops, utils
 from aw_nas.common import genotype_from_str, group_and_sort_by_to_node
 from aw_nas.final.base import FinalModel
+from aw_nas.final.det_model import HeadModel
 from aw_nas.final.ofa_model import OFAGenotypeModel
 from aw_nas.ops import MobileNetV3Block
-from aw_nas.utils import (RegistryMeta, box_utils, make_divisible, nms, weights_init)
+from aw_nas.utils import (RegistryMeta, box_utils, make_divisible, nms)
 from aw_nas.utils.common_utils import Context, nullcontext
 from aw_nas.utils.exception import ConfigException, expect
-from torch import nn
+
 
 
 def SeperableConv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=0, relu6=False):
@@ -98,10 +102,16 @@ class PredictModel(nn.Module):
         return output
 
 
-class SSDHeadModel(nn.Module):
+class SSDHeadFinalModel(FinalModel):
+    NAME = "ssd_head_final_model"
 
-    def __init__(self, device, num_classes=10, extras=None, regression_headers=None, classification_headers=None):
-        super(SSDHeadModel, self).__init__()
+    def __new__(self, device, num_classes, 
+                 feature_channels,
+                 expansions,
+                 channels,
+                 aspect_ratios,
+                 schedule_cfg=None):
+        extras, regression_headers, classification_headers = generate_headers(num_classes, feature_channels, expansions, channels, aspect_ratios, device=device)
         self.device = device
         self.num_classes = num_classes
 
@@ -109,31 +119,8 @@ class SSDHeadModel(nn.Module):
         self.regression_headers = regression_headers
         self.classification_headers = classification_headers
         expect(None not in [extras, regression_headers, classification_headers], 'Extras, regression_headers and classification_headers must be provided, got None instead.', ConfigException)
-
-        self._init_weights()
-
-    def forward(self, features, output):
-        expect(isinstance(features, (list, tuple)), 'features must be a series of feature.', ValueError)
-        x = output
-        for extra in self.extras:
-            x = extra(x)
-            features.append(x)
-        expect(len(features) == len(self.regression_headers) == len(self.classification_headers),
-            'features and headers must have the exactly same length, got {}, {}, {} instead.'.format(len(features), len(self.regression_headers), len(self.classification_headers)), ValueError)
-
-        confidences = []
-        locations = []
-        for feat, l, c in zip(features, self.regression_headers, self.classification_headers):
-            locations.append(l(feat).permute(0, 2, 3, 1).contiguous())
-            confidences.append(c(feat).permute(0, 2, 3, 1).contiguous())
-        locations = torch.cat([t.view(t.size(0), -1) for t in locations], 1).view(x.shape[0], -1, 4)
-        confidences = torch.cat([t.view(t.size(0), -1) for t in confidences], 1).view(x.shape[0], -1, self.num_classes)
-        return confidences, locations
-
-    def _init_weights(self):
-        self.extras.apply(weights_init)
-        self.regression_headers.apply(weights_init)
-        self.classification_headers.apply(weights_init)
+        return HeadModel(device, num_classes=num_classes,
+                                            extras=extras, regression_headers=regression_headers, classification_headers=classification_headers)
 
 
 class SSDFinalModel(FinalModel):
@@ -162,11 +149,8 @@ class SSDFinalModel(FinalModel):
 
 
         first_stage_channel = self.final_model.backbone.channels[feature_stages[0] + 1]
-
-        extras, regression_headers, classification_headers = generate_headers(num_classes, first_stage_channel, device=device, **head_cfg)
         self.norm = ops.L2Norm(first_stage_channel, 20)
-        self.head = SSDHeadModel(device, num_classes=num_classes,
-                                            extras=extras, regression_headers=regression_headers, classification_headers=classification_headers)
+        self.head = SSDHeadFinalModel(device, num_classes, first_stage_channel, **head_cfg)
 
 
         self.search_space = search_space
