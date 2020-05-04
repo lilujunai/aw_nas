@@ -158,8 +158,8 @@ class VOC(BaseDataset):
                  train_sets=[("VOC2007", "trainval"), ("VOC2012", "trainval")],
                  test_sets=[("VOC2007", "test")],
                  train_crop_size=300, test_crop_size=300, image_mean=(103.94, 116.78, 123.68), image_std=128.,
-                 center_variance=0.1, size_variance=0.2, iou_threshold=0.5, keep_difficult=False):
-        super(VOC, self).__init__()
+                 center_variance=0.1, size_variance=0.2, iou_threshold=0.5, keep_difficult=False, relative_dir=None):
+        super(VOC, self).__init__(relative_dir)
         self.load_train_only = load_train_only
         self.train_data_dir = os.path.join(self.data_dir, "train")
         self.class_name_file = class_name_file
