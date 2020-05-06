@@ -27,7 +27,7 @@ dataset_cfg:
   random_seed: 123
   train_crop_size: 300
   clip: true
-  aspect_ratios: [[2, 3], [2, 3], [2, 3], [2, 3], [2], [2]]
+  aspect_ratios: [[2, 3], [2, 3], [2, 3], [2, 3], [2, 3], [2, 3]]
   iou_threshold: 0.5
 # ---- End Type cifar10 ----
 ## ---- End Component dataset ----
@@ -113,7 +113,7 @@ trainer_cfg:
 # ---- End Type simple ----
 ## ---- End Component trainer ----
 
-final_model_type: ssd_final_model
+final_model_type: efficientdet_final_model
 final_model_cfg:
   num_classes: 21
   backbone_type: ofa_final_model
@@ -126,17 +126,19 @@ final_model_cfg:
     mult_ratio: 1.
     kernel_sizes: [3, 5, 7]
   backbone_state_dict_path: null
-  head_type: ssd_head_final_model
+  head_type: efficientdet_head_final_model
   head_cfg:
-    expansions: [1, 1, 1, 1]
-    channels: [1152, 512, 256, 256, 128]
-    aspect_ratios: [[2, 3], [2, 3], [2, 3], [2, 3], [2], [2]]
+    channels: 160
+    aspect_ratios: [2, 3]
+    attention: false
+    repeat: 1
+
   backbone_state_dict_path: /home/tangchangcheng/scripts/mbv3_595M.pt
 
 
 final_trainer_type: det_final_trainer
 final_trainer_cfg:
-  batch_size: 128
+  batch_size: 32
   epochs: 300
   optimizer_scheduler:
     eta_min: 0.01

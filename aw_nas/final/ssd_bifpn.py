@@ -189,9 +189,9 @@ class BiFPN(nn.Module):
         self.conv7_down = SeparableConvBlock(num_channels, onnx_export=onnx_export)
 
         # Feature scaling layers
-        self.p6_upsample = nn.Upsample(scale_factor=2, mode='nearest')
+        self.p6_upsample = nn.Upsample(scale_factor=1.7, mode='nearest')
         self.p5_upsample = nn.Upsample(scale_factor=2, mode='nearest')
-        self.p4_upsample = nn.Upsample(scale_factor=2, mode='nearest')
+        self.p4_upsample = nn.Upsample(scale_factor=1.9, mode='nearest')
         self.p3_upsample = nn.Upsample(scale_factor=2, mode='nearest')
 
         self.p4_downsample = MaxPool2dStaticSamePadding(3, 2)

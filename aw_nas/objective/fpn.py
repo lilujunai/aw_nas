@@ -14,16 +14,16 @@ from aw_nas.objective.base import BaseObjective
 from aw_nas.utils.torch_utils import accuracy
 from aw_nas.utils import box_utils
 
-class SSDObjective(BaseObjective):
-    NAME = "ssd_detection"
+class FPNObjective(BaseObjective):
+    NAME = "fpn_detection"
 
     def __init__(self, search_space, num_classes=21, nms_threshold=0.5):
-        super(SSDObjective, self).__init__(search_space)
+        super(FPNObjective, self).__init__(search_space)
         self.num_classes = num_classes
 
         min_dim=300
         feature_maps=[19, 10, 5, 3, 2, 1]
-        aspect_ratios=[[2, 3], [2,3], [2,3], [2,3], [2], [2]]
+        aspect_ratios=[[2, 3], [2,3], [2,3], [2,3], [2, 3], [2, 3]]
         steps=[16, 32, 64, 100, 150, 300]
         scales=[45, 90, 135, 180, 225, 270, 315]
         clip=True
@@ -31,7 +31,7 @@ class SSDObjective(BaseObjective):
         size_variance=0.2
         self.priors = PriorBox(min_dim, aspect_ratios, feature_maps, scales, steps, (center_variance, size_variance), clip).forward()
         # self.target_transform = TargetTransform(self.priors, 0.5,  (center_variance, size_variance))
-        self.box_loss = MultiBoxLoss(num_classes, nms_threshold, True, 0, True, 3, 1 - nms_threshold, False)
+        self.box_loss = MultiBoxFocalLoss(num_classes, nms_threshold, True, 0, True, 3, 1 - nms_threshold, False)
         self.predictor = PredictModel(num_classes, 0, 200, 0.01, nms_threshold, priors=self.priors)
 
     @classmethod
@@ -67,17 +67,15 @@ class SSDObjective(BaseObjective):
         return self.box_loss(outputs, targets)
 
 
-class MultiBoxLoss(nn.Module):
-    """SSD Weighted Loss Function
+class MultiBoxFocalLoss(nn.Module):
+    """RetinaNet Weighted Loss Function
     Compute Targets:
         1) Produce Confidence Target Indices by matching  ground truth boxes
            with (default) 'priorboxes' that have jaccard index > threshold parameter
            (default threshold: 0.5).
         2) Produce localization target by 'encoding' variance into offsets of ground
            truth boxes and their matched  'priorboxes'.
-        3) Hard negative mining to filter the excessive number of negative examples
-           that comes with using a large number of default bounding boxes.
-           (default negative:positive ratio 3:1)
+        3) Focal loss for classification
     Objective Loss:
         L(x,c,l,g) = (Lconf(x, c) + αLloc(x,l,g)) / N
         Where, Lconf is the CrossEntropy Loss and Lloc is the SmoothL1 Loss
@@ -92,7 +90,7 @@ class MultiBoxLoss(nn.Module):
 
     def __init__(self, num_classes, overlap_thresh, prior_for_matching,
                  bkg_label, neg_mining, neg_pos, neg_overlap, encode_target, variance=(0.1, 0.2), device=None):
-        super(MultiBoxLoss, self).__init__()
+        super(MultiBoxFocalLoss, self).__init__()
         self.num_classes = num_classes
         self.threshold = overlap_thresh
         self.background_label = bkg_label
@@ -107,14 +105,13 @@ class MultiBoxLoss(nn.Module):
     def forward(self, predictions, targets):
         """Multibox Loss
         Args:
-            predictions (tuple): A tuple containing loc preds, conf preds,
-            and prior boxes from SSD net.
-                conf shape: torch.size(batch_size,num_priors,num_classes)
-                loc shape: torch.size(batch_size,num_priors,4)
-                priors shape: torch.size(num_priors,4)
+            predictions (tuple): A tuple containing loc preds, conf preds
+                conf_data   : torch.size(batch_size,num_priors,num_classes)
+                loc_data    : torch.size(batch_size,num_priors,4)
 
-            targets (tensor): Ground truth boxes and labels for a batch,
-                shape: [batch_size,num_objs,5] (last idx is the label).
+            targets (tensor): Ground truth boxes and labels for a batch
+                conf_t      : torch.size(batch_size,num_priors)
+                loc_t       : torch.size(batch_size,num_priors,4)
         """
         loc_data, conf_data = predictions
         loc_t, conf_t = targets
@@ -128,38 +125,56 @@ class MultiBoxLoss(nn.Module):
 
         # Localization Loss (Smooth L1)
         # Shape: [batch,num_priors,4]
-        import ipdb; ipdb.set_trace()
         pos_idx = pos.unsqueeze(pos.dim()).expand_as(loc_data)
         loc_p = loc_data[pos_idx].view(-1, 4)
         loc_t = loc_t[pos_idx].view(-1, 4)
         loss_l = F.smooth_l1_loss(loc_p, loc_t, size_average=False)
 
-        # Compute max conf across batch for hard negative mining
-        batch_conf = conf_data.view(-1, self.num_classes)
-        loss_c = box_utils.log_sum_exp(batch_conf) - batch_conf.gather(1, conf_t.view(-1, 1))
+        # Focal loss for classification
+        alpha = 0.25
+        gamma = 2
+        loss_c = []
+        for image in range(num):
+            classification = conf_data[image, :, :]
+            label = conf_t[image, :]
+            pos_image = label > 0
+            num_positive_anchors = pos_image.sum()
 
-        # Hard Negative Mining
-        tmp = pos.reshape(loss_c.shape)
-        loss_c[tmp] = 0  # filter out pos boxes for now
+            # 如果没有前景的话就直接跳过，把loss置为0。这幅图片就没有东西
+            if pos_image.sum() == 0:
+                if torch.cuda.is_available():
+                    loss_c.append(torch.tensor(0).float().cuda())
+                else:
+                    loss_c.append(torch.tensor(0).float())
+                continue
+            
+            # 此处存疑，repo里是这么写的，没有用sigmoid，看看效果吧.....
+            classification = torch.clamp(classification, 1e-4, 1.0 - 1e-4)
 
+            # 匹配的位置设置为 1，其余为0，targets的大小为num_priors * num_classes
+            targets = torch.zeros(classification.shape)
+            targets.scatter_(1, label.unsqueeze(label.dim()).long(), 1)
+            if torch.cuda.is_available():
+                targets = targets.cuda()
 
-        loss_c = loss_c.view(num, -1)
-        _, loss_idx = loss_c.sort(1, descending=True)
-        _, idx_rank = loss_idx.sort(1)
-        num_pos = pos.long().sum(1, keepdim=True)
-        num_neg = torch.clamp(self.negpos_ratio*num_pos, max=pos.size(1)-1)
-        neg = idx_rank < num_neg.expand_as(idx_rank)
+            # 计算weights
+            if torch.cuda.is_available():
+                alpha_factor = torch.ones(targets.shape).cuda() * alpha
+            else:
+                alpha_factor = torch.ones(targets.shape) * alpha
+            
+            alpha_factor = torch.where(torch.eq(targets, 1.), alpha_factor, 1. - alpha_factor)
+            focal_weight = torch.where(torch.eq(targets, 1.), 1. - classification, classification)
+            focal_weight = alpha_factor * torch.pow(focal_weight, gamma)
 
-        # Confidence Loss Including Positive and Negative Examples
-        pos_idx = pos.unsqueeze(2).expand_as(conf_data)
-        neg_idx = neg.unsqueeze(2).expand_as(conf_data)
-        conf_p = conf_data[(pos_idx+neg_idx).gt(0)].view(-1, self.num_classes)
-        targets_weighted = conf_t[(pos+neg).gt(0)]
-        loss_c = F.cross_entropy(conf_p, targets_weighted, size_average=False)
+            bce = -(targets * torch.log(classification) + (1.0 - targets) * torch.log(1.0 - classification))
 
-        # Sum of losses: L(x,c,l,g) = (Lconf(x, c) + αLloc(x,l,g)) / N
+            cls_loss = focal_weight * bce
+
+            loss_c.append(cls_loss.sum()/torch.clamp(num_positive_anchors.float(), min=1.0))
 
         N = num_pos.data.sum()
         loss_l /= N
-        loss_c /= N
+        # loss_c /= N       # focal loss我完全单独算了
+        loss_c = torch.stack(loss_c).mean(dim=0, keepdim=True)
         return loss_l, loss_c
