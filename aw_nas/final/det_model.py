@@ -77,7 +77,7 @@ class EfficientDetHeadModel(nn.Module):
         for feat in output_features:
             locations.append(self.regression_headers(feat).permute(0, 2, 3, 1).contiguous())
             confidences.append(self.classification_headers(feat).permute(0, 2, 3, 1).contiguous())
-        
+
         locations = torch.cat([t.view(t.size(0), -1) for t in locations], 1).view(features[0].shape[0], -1, 4)
         confidences = torch.cat([t.view(t.size(0), -1) for t in confidences], 1).view(features[0].shape[0], -1, self.num_classes)
         return confidences, locations

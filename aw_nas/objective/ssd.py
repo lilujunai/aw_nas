@@ -22,10 +22,10 @@ class SSDObjective(BaseObjective):
         self.num_classes = num_classes
 
         min_dim=300
-        feature_maps=[19, 10, 5, 3, 2, 1]
-        aspect_ratios=[[2, 3], [2,3], [2,3], [2,3], [2], [2]]
-        steps=[16, 32, 64, 100, 150, 300]
-        scales=[45, 90, 135, 180, 225, 270, 315]
+        feature_maps=[38, 19, 10, 5, 3]
+        aspect_ratios=[[2, 3], [2,3], [2,3], [2,3], [2, 3]]
+        steps=[8, 16, 32, 64, 100]
+        scales=[21, 45, 90, 135, 180, 225]
         clip=True
         center_variance=0.1 
         size_variance=0.2
@@ -128,7 +128,6 @@ class MultiBoxLoss(nn.Module):
 
         # Localization Loss (Smooth L1)
         # Shape: [batch,num_priors,4]
-        import ipdb; ipdb.set_trace()
         pos_idx = pos.unsqueeze(pos.dim()).expand_as(loc_data)
         loc_p = loc_data[pos_idx].view(-1, 4)
         loc_t = loc_t[pos_idx].view(-1, 4)

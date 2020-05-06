@@ -58,7 +58,7 @@ def generate_headers_bifpn(num_classes, in_channels, bifpn_out_channels, aspect_
 
     # regression & classification 共享权重，因此只有一个
     # TODO: 他们共享权重，但是应该不共享bn？
-    ratios = len(aspect_ratios)
+    ratios = len(aspect_ratios) * 2 + 2
 
     regression_headers =  SeperableConv2d(bifpn_out_channels, out_channels=ratios * 4, kernel_size=3, padding=1)
     classification_headers = SeperableConv2d(bifpn_out_channels, out_channels=ratios * num_classes, kernel_size=3, padding=1)
