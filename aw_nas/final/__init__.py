@@ -14,3 +14,5 @@ from .general_model import GeneralGenotypeModel
 
 from .ssd_model import SSDFinalModel, SSDHeadFinalModel
 from .det_trainer import DetectionFinalTrainer
+
+from .efficientdet_model import EfficientDetFinalModel, EfficientDetHeadFinalModel

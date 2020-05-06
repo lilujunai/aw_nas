@@ -18,7 +18,7 @@ from torch import nn
 from aw_nas import ops, utils
 from aw_nas.common import genotype_from_str, group_and_sort_by_to_node
 from aw_nas.final.base import FinalModel
-from aw_nas.final.det_model import EfficientDet_HeadModel
+from aw_nas.final.det_model import EfficientDetHeadModel, PredictModel
 from aw_nas.final.ofa_model import OFAGenotypeModel
 from aw_nas.ops import MobileNetV3Block
 from aw_nas.utils import (RegistryMeta, box_utils, make_divisible, nms)
@@ -27,6 +27,7 @@ from aw_nas.utils.exception import ConfigException, expect
 from .ssd_bifpn import BiFPN
 
 
+# TODO: 确认是否要去掉bn
 def SeperableConv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=0, relu6=False):
     act_fn = nn.ReLU6 if relu6 else nn.ReLU
     return nn.Sequential(
@@ -36,6 +37,8 @@ def SeperableConv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=
         act_fn(),
         nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=1),
     )
+
+
 
 def generate_headers_bifpn(num_classes, in_channels, bifpn_out_channels, aspect_ratios=[2, 3], attention=True, repeat=3 ,device=None, **kwargs):
     '''
@@ -50,65 +53,20 @@ def generate_headers_bifpn(num_classes, in_channels, bifpn_out_channels, aspect_
     '''
     # extras 可以级联的BiFPN, first_time参数会控制in_channels是否有用, True的时候有用否则没用
     extras = nn.Sequential(
-        *[BiFPN(bifpn_out_channels, in_channels, True if num == 0 else False, attention) for num in range(repeat)]
+        *[BiFPN(bifpn_out_channels, in_channels, num == 0, attention) for num in range(repeat)]
     )
 
     # regression & classification 共享权重，因此只有一个
+    # TODO: 他们共享权重，但是应该不共享bn？
     ratios = len(aspect_ratios)
 
     regression_headers =  SeperableConv2d(bifpn_out_channels, out_channels=ratios * 4, kernel_size=3, padding=1)
-
     classification_headers = SeperableConv2d(bifpn_out_channels, out_channels=ratios * num_classes, kernel_size=3, padding=1)
 
     return extras, regression_headers, classification_headers
 
-class PredictModel(nn.Module):
-    def __init__(self, num_classes, background_label, top_k=200, confidence_thresh=0.01, nms_thresh=0.5, variance=(0.1, 0.2), priors=None):
-        super(PredictModel, self).__init__()
-        self.num_classes = num_classes
-        self.background_label = background_label
-        self.top_k = top_k
-        self.confidence_thresh = confidence_thresh
-        self.nms_thresh = nms_thresh
-        self.variance = variance
-        self.priors = priors
 
-    def forward(self, confidences, locations):
-        priors = self.priors.to(confidences.device)
-        num = confidences.size(0)  # batch size
-        num_priors = priors.size(0)
-        output = torch.zeros(num, self.num_classes, self.top_k, 5)
-        conf_preds = confidences.view(num, num_priors,
-                                      self.num_classes).transpose(2, 1)
-
-        for i in range(num):
-            decoded_boxes = box_utils.decode(locations[i],
-                                             priors, self.variance)
-            conf_scores = conf_preds[i].clone()
-
-            for cls_idx in range(1, self.num_classes):
-                c_mask = conf_scores[cls_idx].gt(self.confidence_thresh)
-                scores = conf_scores[cls_idx][c_mask]
-                if scores.size(0) == 0:
-                    continue
-                l_mask = c_mask.unsqueeze(1).expand_as(decoded_boxes)
-                boxes = decoded_boxes[l_mask].view(-1, 4)
-                # idx of highest scoring and non-overlapping boxes per class
-                # ids, count = nms(boxes, scores, self.nms_thresh, self.top_k)
-                box_prob = torch.cat([boxes, scores.view(-1, 1)], 1)
-                ids = nms(box_prob.cpu().detach().numpy(),
-                          self.nms_thresh, self.top_k)
-                output[i, cls_idx, :len(ids)] = \
-                    torch.cat((scores[ids].unsqueeze(1),
-                               boxes[ids]), 1)
-        flt = output.contiguous().view(num, -1, 5)
-        _, idx = flt[:, :, 0].sort(1, descending=True)
-        _, rank = idx.sort(1)
-        flt[(rank < self.top_k).unsqueeze(-1).expand_as(flt)].fill_(0)
-        return output
-
-
-class EfficientDet_HeadFinalModel(FinalModel):
+class EfficientDetHeadFinalModel(FinalModel):
     NAME = "efficientdet_head_final_model"
 
     def __new__(self, device, num_classes, 
@@ -126,25 +84,25 @@ class EfficientDet_HeadFinalModel(FinalModel):
         self.regression_headers = regression_headers
         self.classification_headers = classification_headers
         expect(None not in [extras, regression_headers, classification_headers], 'Extras, regression_headers and classification_headers must be provided, got None instead.', ConfigException)
-        return EfficientDet_HeadModel(device, num_classes=num_classes,
+        return EfficientDetHeadModel(device, num_classes=num_classes,
                                             extras=extras, regression_headers=regression_headers, classification_headers=classification_headers)
 
 
-class EfficientDet_FinalModel(FinalModel):
+class EfficientDetFinalModel(FinalModel):
     NAME = "efficientdet_final_model"
     SCHEDULABLE_ATTRS = []
 
     def __init__(self, search_space, device,
                  backbone_type,
                  backbone_cfg,
-                 feature_stages=[4, -1],
+                 feature_levels=[3, 4, 5],
                  backbone_state_dict_path=None,
                  head_type='efficientdet_head_final_model',
                  head_cfg={},
                  num_classes=10,
                  is_test=False,
                  schedule_cfg=None):
-        super(SSDFinalModel, self).__init__(schedule_cfg=schedule_cfg)
+        super(EfficientDetFinalModel, self).__init__(schedule_cfg=schedule_cfg)
         '''
         Args:
             head_cfg:   需要匹配head的内容，可能还有需要改动的
@@ -152,16 +110,16 @@ class EfficientDet_FinalModel(FinalModel):
         self.search_space = search_space
         self.device = device
         self.num_classes = num_classes
-        self.feature_stages = feature_stages
+        self.feature_levels = feature_levels
 
         self.final_model = RegistryMeta.get_class('final_model', backbone_type)(search_space, device, num_classes=num_classes, schedule_cfg=schedule_cfg, **backbone_cfg)
         if backbone_state_dict_path:
             self._load_base_net(backbone_state_dict_path)
 
         # 这里要给出所有的backbone中需要做BiFPN的特征维数，按照[p3, p4, p5]的顺序给出
-        backbone_stage_channel = self.final_model.backbone.channels[feature_stages]
+        backbone_stage_channel = self.final_model.get_feature_channel_num(feature_levels)
         self.norm = [ops.L2Norm(ch, 20) for ch in backbone_stage_channel]
-        self.head = EfficientDet_HeadFinalModel(device, num_classes, backbone_stage_channel, **head_cfg)
+        self.head = EfficientDetHeadFinalModel(device, num_classes, backbone_stage_channel, **head_cfg)
 
 
         self.search_space = search_space
@@ -211,7 +169,7 @@ class EfficientDet_FinalModel(FinalModel):
 
     def forward(self, inputs): #pylint: disable=arguments-differ
         # 这一句话就可以表示中间层的feature？？我默认了
-        features, output = self.final_model.get_det_features(inputs, self.feature_stages)
+        features, _ = self.final_model.get_features(inputs, self.feature_levels)
 
         # 这里的输入是(p3, p4, p5)的feature map
         confidences, locations = self.head(features)
