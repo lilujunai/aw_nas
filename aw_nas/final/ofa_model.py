@@ -50,6 +50,12 @@ class OFAGenotypeModel(FinalModel):
 
     def forward(self, inputs):
         return self.backbone(inputs)
+
+    def get_features(self, inputs, p_levels=(4, 5)):
+        return self.backbone.get_features(inputs, p_levels)
+    
+    def get_feature_channel_num(self, p_level):
+        return self.backbone.get_feature_channel_num(p_level)
     
     def load_state_dict(self, model, strict=True):
         try:

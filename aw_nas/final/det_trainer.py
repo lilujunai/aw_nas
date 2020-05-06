@@ -77,7 +77,7 @@ class DetectionFinalTrainer(OFAFinalTrainer): #pylint: disable=too-many-instance
         if eval_dir is None:
             eval_dir = os.environ['HOME']
             pid = os.getpid()
-            eval_dir = os.path.join(eval_dir, '.voc_exp', str(pid))
+            eval_dir = os.path.join(eval_dir, '.det_exp', str(pid))
             os.makedirs(eval_dir, exist_ok=True)
         self.eval_dir = eval_dir
 
@@ -170,7 +170,7 @@ class DetectionFinalTrainer(OFAFinalTrainer): #pylint: disable=too-many-instance
         model.train()
 
         results = []
-        for step, (ids, inputs, target, shape) in enumerate(train_queue):
+        for step, (ids, inputs, target) in enumerate(train_queue):
             inputs = inputs.to(device)
             target = [t.to(device) for t in target]
 
