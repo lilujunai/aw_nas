@@ -9,7 +9,7 @@ from torch import nn
 from aw_nas import Component
 from aw_nas.ops import *
 from aw_nas.ops.baseline_ops import MobileNetV2Block, MobileNetV3Block
-from aw_nas.utils import make_divisible
+from aw_nas.utils import make_divisible, feature_level_to_stage_index
 from aw_nas.utils.common_utils import _get_channel_mask
 from aw_nas.utils.exception import ConfigException, expect
 
@@ -449,6 +449,22 @@ class MobileNetV2Arch(BaseBackboneArch):
         self.cells = nn.ModuleList(cells)
         return self
 
+    def get_features(self, inputs, p_levels):
+        out = self.stem(inputs)
+        level_indexes = feature_level_to_stage_index(self.strides)
+        features = []
+        for i, cell in enumerate(self.cells):
+            for j, block in enumerate(cell):
+                out = block(out)
+            features.append(out)
+        out = self.conv_head(out)
+        features[-1] = out
+        return [features[level_indexes[p]] for p in p_levels], out
+
+    def get_feature_channel_num(self, p_levels):
+        level_indexes = feature_level_to_stage_index(self.strides)
+        return [self.channels[level_indexes[p]] for p in p_levels]
+
 
 class MobileNetV3Arch(BaseBackboneArch):
     NAME = "mbv3_backbone"
@@ -607,3 +623,19 @@ class MobileNetV3Arch(BaseBackboneArch):
             cells[-1] = nn.ModuleList(cells[-1])
         self.cells = nn.ModuleList(cells)
         return self
+
+    def get_features(self, inputs, p_levels):
+        out = self.stem(inputs)
+        level_indexes = feature_level_to_stage_index(self.strides)
+        features = []
+        for i, cell in enumerate(self.cells):
+            for j, block in enumerate(cell):
+                out = block(out)
+            features.append(out)
+        out = self.conv_head(out)
+        features[-1] = out
+        return [features[level_indexes[p]] for p in p_levels], out
+
+    def get_feature_channel_num(self, p_levels):
+        level_indexes = feature_level_to_stage_index(self.strides + [1])
+        return [self.channels[1 + level_indexes[p]] for p in p_levels]

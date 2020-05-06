@@ -8,6 +8,7 @@ import copy
 import shutil
 import inspect
 import functools
+import itertools
 import collections
 from collections import OrderedDict, namedtuple
 from contextlib import contextmanager
@@ -476,3 +477,12 @@ def _get_channel_mask(filters, num_channels):
     reserved_channels = channel_order[:num_channels]
     mask[reserved_channels] = 1
     return mask
+
+
+#---- Detection Task Utils ----
+def feature_level_to_stage_index(strides, offset=1):
+    """
+    calculate the level of each stage feature map by stride
+    """
+    levels = itertools.accumulate([offset] + list(strides), lambda x, y: x + y - 1)
+    return {l: i for i, l in enumerate(levels, -1)}

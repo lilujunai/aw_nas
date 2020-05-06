@@ -19,6 +19,31 @@ from aw_nas.utils.coco import COCO
 from aw_nas.utils.coco_eval import COCOeval
 
 
+min_keypoints_per_image = 10
+
+def _count_visible_keypoints(anno):
+    return sum(sum(1 for v in ann["keypoints"][2::3] if v > 0) for ann in anno)
+
+def _has_only_empty_bbox(anno):
+    return all(any(o <= 1 for o in obj["bbox"][2:]) for obj in anno)
+
+def has_valid_annotation(anno):
+    # if it's empty, there is no annotation
+    if len(anno) == 0:
+        return False
+    # if all boxes have close to zero area, there is no annotation
+    if _has_only_empty_bbox(anno):
+        return False
+    # keypoints task have a slight different critera for considering
+    # if an annotation is valid
+    if "keypoints" not in anno[0]:
+        return True
+    # for keypoint detection tasks, only consider valid images those
+    # containing at least min_keypoints_per_image
+    if _count_visible_keypoints(anno) >= min_keypoints_per_image:
+        return True
+    return False
+
 class COCODetection(data.Dataset):
 
     """COCO Detection Dataset Object
@@ -72,16 +97,19 @@ class COCODetection(data.Dataset):
             self._class_to_coco_cat_id = dict(zip([c['name'] for c in cats],
                                                   _COCO.getCatIds()))
             indexes = _COCO.getImgIds()
+            
+            if image_set.find('test') != -1:
+                print('test set will not load annotations!')
+            else:
+                annos, indexes = self._load_coco_annotations(coco_name, indexes, _COCO, remove_no_anno=True)
+                self.annotations.extend(annos)
+            
             self.image_indexes = indexes
             # seems it will reduce the speed during the training.
             # self.ids.extend(indexes)
             # self.data_len.append(len(indexes))
             # self.data_name.append(data_name)
             self.ids.extend(self._load_coco_img_path(coco_name, indexes))
-            if image_set.find('test') != -1:
-                print('test set will not load annotations!')
-            else:
-                self.annotations.extend(self._load_coco_annotations(coco_name, indexes,_COCO))
 
 
     def image_path_from_index(self, name, index):
@@ -108,21 +136,23 @@ class COCODetection(data.Dataset):
                         prefix + '_' + name + '.json')
 
 
-    def _load_coco_annotations(self, coco_name, indexes, _COCO):
+    def _load_coco_annotations(self, coco_name, indexes, _COCO, remove_no_anno=False):
         cache_file=os.path.join(self.cache_path,coco_name+'_gt_roidb.pkl')
         if os.path.exists(cache_file):
             with open(cache_file, 'rb') as fid:
-                roidb = pickle.load(fid)
-            print('{} gt roidb loaded from {}'.format(coco_name,cache_file))
-            return roidb
+                roidb, valid_indexes = pickle.load(fid)
+            print('{} gt roidb loaded from {}'.format(coco_name, cache_file))
+            return roidb, valid_indexes
 
         print('parsing gt roidb for {}'.format(coco_name))
-        gt_roidb = [self._annotation_from_index(index, _COCO)
+        gt_roidb = [(index, self._annotation_from_index(index, _COCO, remove_no_anno))
                     for index in indexes]
+        valid_indexes = [index for index, anno in gt_roidb if anno is not None]
+        gt_roidb = [anno for index, anno in gt_roidb if anno is not None]
         with open(cache_file, 'wb') as fid:
-            pickle.dump(gt_roidb,fid,pickle.HIGHEST_PROTOCOL)
+            pickle.dump([gt_roidb, valid_indexes], fid, pickle.HIGHEST_PROTOCOL)
         print('wrote gt roidb to {}'.format(cache_file))
-        return gt_roidb
+        return gt_roidb, valid_indexes
 
     def _load_coco_img_path(self, coco_name, indexes):
         cache_file=os.path.join(self.cache_path,coco_name+'_img_path.pkl')
@@ -140,7 +170,7 @@ class COCODetection(data.Dataset):
         print('wrote img path to {}'.format(cache_file))
         return img_path
 
-    def _annotation_from_index(self, index, _COCO):
+    def _annotation_from_index(self, index, _COCO, remove_images_without_annotations=False):
         """
         Loads COCO bounding-box instance annotations. Crowd instances are
         handled by marking their overlaps (with all categories) to -1. This
@@ -152,6 +182,8 @@ class COCODetection(data.Dataset):
 
         annIds = _COCO.getAnnIds(imgIds=index, iscrowd=None)
         objs = _COCO.loadAnns(annIds)
+        if remove_images_without_annotations and not has_valid_annotation(objs):
+            return None
         # Sanitize bboxes -- some are invalid
         valid_objs = []
         for obj in objs:
@@ -198,7 +230,7 @@ class COCODetection(data.Dataset):
             image, boxes, labels = self.preproc(img, boxes, labels)
 
         if self.target_transform is not None:
-            (boxes, labels) = self.target_transform((boxes, labels), width, height)
+            (boxes, labels) = self.target_transform(boxes, labels)
         target = (boxes, labels)
         return torch.tensor(image), target, height, width
 
@@ -300,8 +332,8 @@ class COCODetection(data.Dataset):
     def _coco_results_one_category(self, boxes, cat_id):
         results = []
         for im_ind, index in enumerate(self.image_indexes):
-            dets = boxes[im_ind].astype(np.float)
-            if dets == []:
+            dets = np.array(boxes[im_ind]).astype(np.float)
+            if len(dets) == 0:
                 continue
             scores = dets[:, -1]
             xs = dets[:, 0]
