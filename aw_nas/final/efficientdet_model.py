@@ -40,7 +40,7 @@ def SeperableConv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=
 
 
 
-def generate_headers_bifpn(num_classes, in_channels, bifpn_out_channels, aspect_ratios=[2, 3], attention=True, repeat=3 ,device=None, **kwargs):
+def generate_headers_bifpn(num_classes, in_channels, bifpn_out_channels, aspect_ratios=[2, 3], attention=True, repeat=3, num_layers=4, device=None, **kwargs):
     '''
     Args:
         num_class:          分类类别的数量
@@ -60,8 +60,16 @@ def generate_headers_bifpn(num_classes, in_channels, bifpn_out_channels, aspect_
     # TODO: 他们共享权重，但是应该不共享bn？
     ratios = len(aspect_ratios) * 2 + 2
 
-    regression_headers =  SeperableConv2d(bifpn_out_channels, out_channels=ratios * 4, kernel_size=3, padding=1)
-    classification_headers = SeperableConv2d(bifpn_out_channels, out_channels=ratios * num_classes, kernel_size=3, padding=1)
+    regression_headers = nn.ModuleList([
+        nn.Sequential(
+            *[SeperableConv2d(bifpn_out_channels, out_channels=bifpn_out_channels, kernel_size=3, padding=1) for m in range(num_layers)] + [SeperableConv2d(bifpn_out_channels, out_channels=ratios * 4, kernel_size=3, padding=1)]
+        ) for m in range(5)]
+    )
+    classification_headers = nn.ModuleList([
+        nn.Sequential(
+            *[SeperableConv2d(bifpn_out_channels, out_channels=bifpn_out_channels, kernel_size=3, padding=1) for m in range(num_layers)] + [SeperableConv2d(bifpn_out_channels, out_channels=ratios * num_classes, kernel_size=3, padding=1)]
+        ) for m in range(5)]
+    )
 
     return extras, regression_headers, classification_headers
 

@@ -74,9 +74,9 @@ class EfficientDetHeadModel(nn.Module):
         confidences = []
         locations = []
         # 与SSD不同的地方在于此处只有一个regression header, 一个classification header
-        for feat in output_features:
-            locations.append(self.regression_headers(feat).permute(0, 2, 3, 1).contiguous())
-            confidences.append(self.classification_headers(feat).permute(0, 2, 3, 1).contiguous())
+        for feat, l, c in zip(output_features, self.regression_headers, self.classification_headers):
+            locations.append(l(feat).permute(0, 2, 3, 1).contiguous())
+            confidences.append(c(feat).permute(0, 2, 3, 1).contiguous())
 
         locations = torch.cat([t.view(t.size(0), -1) for t in locations], 1).view(features[0].shape[0], -1, 4)
         confidences = torch.cat([t.view(t.size(0), -1) for t in confidences], 1).view(features[0].shape[0], -1, self.num_classes)
