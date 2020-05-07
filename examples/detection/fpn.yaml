@@ -133,15 +133,15 @@ final_model_cfg:
   head_cfg:
     channels: 160
     aspect_ratios: [2, 3]
-    attention: false
-    repeat: 1
+    attention: True
+    repeat: 3
 
   backbone_state_dict_path: /home/tangchangcheng/scripts/mbv3_595M.pt
 
 
 final_trainer_type: det_final_trainer
 final_trainer_cfg:
-  batch_size: 32
+  batch_size: 64
   epochs: 300
   optimizer_scheduler:
     eta_min: 0.01
