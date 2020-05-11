@@ -26,9 +26,6 @@ dataset_cfg:
   random_choose: false
   random_seed: 123
   train_crop_size: 300
-  clip: true
-  aspect_ratios: [[2, 3], [2, 3], [2, 3], [2, 3], [2], [2]]
-  iou_threshold: 0.5
 # ---- End Type cifar10 ----
 ## ---- End Component dataset ----
 
@@ -90,6 +87,8 @@ objective_cfg:
   # Schedulable attributes:
   num_classes: 21
   nms_threshold: 0.5
+  clip: true
+  aspect_ratios: [[2, 3], [2, 3], [2, 3], [2, 3], [2], [2]]
   # latency_coeff: 1.0
 #   latency_file: latency_block.txt
 
@@ -136,7 +135,7 @@ final_model_cfg:
 
 final_trainer_type: det_final_trainer
 final_trainer_cfg:
-  batch_size: 128
+  batch_size: 32
   epochs: 300
   optimizer_scheduler:
     eta_min: 0.01

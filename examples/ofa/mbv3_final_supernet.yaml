@@ -1,5 +1,6 @@
 rollout_type: ofa
 
+
 ## ---- Component search_space ----
 # ---- Type ofa ----
 search_space_type: ofa
@@ -7,27 +8,27 @@ search_space_cfg:
   num_cell_groups: [1, 4, 4, 4, 4, 4]
   expansions: [1, 6, 6, 6, 6, 6]
   schedule_cfg:
+    kernel_choice:
+        type: value
+        boundary: [1, 51, 120]
+        value: [[3], [3], [3]]
     width_choice:
       type: value
-      boundary: [1, 60, 120]
+      boundary: [1, 180, 240]
       value: [[6], [6,5,4], [6,5,4,3,2]]
     depth_choice:
       type: value
-      boundary: [1, 180, 240]
-      value: [[4], [4,3], [4,3,2]]
+      boundary: [1, 300, 360]
+      value: [[4], [4, 3], [4,3,2]]
 # ---- End Type mnsanet_ofa ----
 ## ---- End Component search_space ----
 
 ## ---- Component dataset ----
 # ---- Type cifar10 ----
-dataset_type: coco
+dataset_type: imagenet
 dataset_cfg:
-  load_train_only: false
-  random_choose: false
-  random_seed: 123
-  train_crop_size: 300
-  train_sets: [["2017", "val"]]
-
+  # Schedulable attributes: 
+  cutout: null
 # ---- End Type cifar10 ----
 ## ---- End Component dataset ----
 
@@ -36,7 +37,7 @@ dataset_cfg:
 controller_type: ofa
 controller_cfg:
   # Schedulable attributes:
-  rollout_type: mbv3_ofa
+  rollout_type: ofa
   force_uniform: true
 # ---- End Type rl ----
 ## ---- End Component controller ----
@@ -49,7 +50,7 @@ evaluator_cfg:
   load_optimizer: false
   load_scheduler: false
   rollout_type: ofa
-  batch_size: 128
+  batch_size: 64
   controller_surrogate_steps: 0
   # derive_surrogate_steps: 0
   mepa_surrogate_steps: 0
@@ -79,16 +80,30 @@ evaluator_cfg:
 # ---- Type supernet ----
 weights_manager_type: ofa_supernet
 weights_manager_cfg:
-  # Schedulable attributes:
+  # Schedulable attributes: 
   rollout_type: ofa
-# ---- End Type supernet ----
-## ---- End Component weights_manager ----
+  backbone_type: mbv3_backbone
+  backbone_cfg:
+    blocks: [1, 4, 4, 4, 4, 4]
+    strides: [1, 2, 2, 2, 1, 2]
+    expansions: [1, 6, 6, 6, 6, 6]
+    channels: [16, 16, 24, 32, 64, 96, 160, 320, 1280]
+    mult_ratio: 1.
+    kernel_sizes: [3]
+    num_classes: 1000
+    block_type: mbv3_block
 
-objective_type: ssd_detection
-objective_cfg: 
-  num_classes: 81
-  clip: true
-  aspect_ratios: [[2, 3], [2, 3], [2, 3], [2, 3], [2], [2]]
+objective_type: ofa_classification
+objective_cfg:
+  # Schedulable attributes:
+  schedule_cfg:
+    soft_loss_coeff:
+      type: value
+      boundary: [1, 60]
+      value: [0.0, 1.0]
+  soft_loss_coeff: 0.0
+  latency_coeff: 1.0
+#   latency_file: latency_block.txt
 
 ## ---- Component trainer ----
 # ---- Type simple ----
@@ -97,7 +112,7 @@ trainer_cfg:
   # Schedulable attributes: controller_samples, derive_samples
   rollout_type: ofa
   epochs: 500
-  test_every: 1
+  test_every: 10
   controller_scheduler: null
   controller_samples: 1
   derive_samples: 8
@@ -110,41 +125,25 @@ trainer_cfg:
 # ---- End Type simple ----
 ## ---- End Component trainer ----
 
-final_model_type: ssd_final_model
+final_model_type: ofa_final_model
 final_model_cfg:
-  num_classes: 81
-  backbone_type: ofa_final_model
-  backbone_cfg:
-    genotypes: "cell_0=1,cell_1=3,cell_2=4,cell_3=4,cell_4=4,cell_5=4, cell_0_block_0=(1, 3),cell_1_block_0=(3, 3),cell_1_block_1=(4, 5),cell_1_block_2=(3, 3), cell_1_block_3=(0, 0), cell_2_block_0=(4, 5),cell_2_block_1=(4, 5),cell_2_block_2=(6, 3),cell_2_block_3=(3, 5),cell_3_block_0=(6, 7),cell_3_block_1=(6, 5),cell_3_block_2=(3, 3),cell_3_block_3=(4, 5),cell_4_block_0=(6, 3),cell_4_block_1=(6, 5),cell_4_block_2=(6, 7),cell_4_block_3=(4, 3),cell_5_block_0=(6, 3),cell_5_block_1=(6, 3),cell_5_block_2=(6, 5),cell_5_block_3=(3, 3)"
-    layer_channels: [24, 24, 32, 48, 96, 136, 192, 1152, 1536]
-    # layer_channels: [16, 16, 24, 32, 64, 96, 160, 320, 1280]
-    backbone_type: mbv3_backbone
-    strides: [1, 2, 2, 2, 1, 2]
-    mult_ratio: 1.
-    kernel_sizes: [3, 5, 7]
-  backbone_state_dict_path: null
-  head_type: ssd_head_final_model
-  head_cfg:
-    expansions: [1, 1, 1, 1]
-    channels: [1152, 512, 256, 256, 128]
-    aspect_ratios: [[2, 3], [2, 3], [2, 3], [2, 3], [2], [2]]
-  backbone_state_dict_path: /home/tangchangcheng/scripts/mbv3_595M.pt
+  backbone_type: mbv3_backbone
+  genotypes: "cell_0=1,cell_1=4,cell_2=4,cell_3=4,cell_4=4,cell_5=4, cell_0_block_0=(1, 3),cell_1_block_0=(6, 7),cell_1_block_1=(6, 7),cell_1_block_2=(6, 7), cell_1_block_3=(6, 7), cell_2_block_0=(6, 7),cell_2_block_1=(6, 7),cell_2_block_2=(6, 7),cell_2_block_3=(6, 7),cell_3_block_0=(6, 7),cell_3_block_1=(6, 7),cell_3_block_2=(6, 7),cell_3_block_3=(6, 7),cell_4_block_0=(6, 7),cell_4_block_1=(6, 7),cell_4_block_2=(6, 7),cell_4_block_3=(6, 7),cell_5_block_0=(6, 7),cell_5_block_1=(6, 7),cell_5_block_2=(6, 7),cell_5_block_3=(6, 7)"
+  layer_channels: [16, 16, 24, 40, 80, 112, 160, 960, 1280]
+  strides: [1, 2, 2, 2, 1, 2]
+  kernel_sizes: [3, 5, 7]
+  ofa_state_dict: null
+  num_classes: 1000
 
-
-final_trainer_type: det_final_trainer
+final_trainer_type: ofa_final_trainer
 final_trainer_cfg:
   batch_size: 64
-  epochs: 200
+  epochs: 30
   optimizer_scheduler:
-    eta_min: 0.01
+    eta_min: 0.0001
     T_max: 30
     type: CosineAnnealingLR
   schedule_cfg: null
-  weight_decay: 0.0001
+  weight_decay: 0.0003
   learning_rate: 0.001
-  momentum: 0.9
-  freeze_base_net: false
-  base_net_lr: 0.0005
   save_as_state_dict: true
-  multiprocess: false
-  eval_every: 1

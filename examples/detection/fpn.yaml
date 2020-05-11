@@ -26,12 +26,9 @@ dataset_cfg:
   random_choose: false
   random_seed: 123
   train_crop_size: 300
-  clip: true
-  aspect_ratios: [[2, 3], [2, 3], [2, 3], [2, 3], [2, 3]]
-  feature_maps: [38, 19, 10, 5, 3]
-  steps: [8, 16, 32, 64, 100]
-  scales: [21, 45, 90, 135, 180, 225]
-  iou_threshold: 0.5
+  image_mean: [0.406, 0.456, 0.485]
+  image_std: [0.225, 0.224, 0.229]
+  normalize: true
 # ---- End Type cifar10 ----
 ## ---- End Component dataset ----
 
@@ -93,8 +90,9 @@ objective_cfg:
   # Schedulable attributes:
   num_classes: 21
   nms_threshold: 0.5
-  # latency_coeff: 1.0
-#   latency_file: latency_block.txt
+  pyramid_levels: [3, 4, 5, 6, 7]
+  scales: [0, 1, 2]
+  ratios: [[1.0, 1.0], [1.4, 0.7], [0.7, 1.4]]
 
 ## ---- Component trainer ----
 # ---- Type simple ----
@@ -134,14 +132,15 @@ final_model_cfg:
     channels: 160
     aspect_ratios: [2, 3]
     attention: True
-    repeat: 3
+    repeat: 6
+    num_layers: 4
 
   backbone_state_dict_path: /home/tangchangcheng/scripts/mbv3_595M.pt
 
 
 final_trainer_type: det_final_trainer
 final_trainer_cfg:
-  batch_size: 64
+  batch_size: 48
   epochs: 300
   optimizer_scheduler:
     eta_min: 0.01
@@ -149,10 +148,10 @@ final_trainer_cfg:
     type: CosineAnnealingLR
   schedule_cfg: null
   weight_decay: 0.0001
-  learning_rate: 0.005
+  learning_rate: 0.0001
   momentum: 0.9
   freeze_base_net: false
-  base_net_lr: 0.0005
+  base_net_lr: 0.00001
   save_as_state_dict: true
-  multiprocess: false
+  multiprocess: false 
   eval_every: 10
