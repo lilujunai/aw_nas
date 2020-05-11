@@ -8,3 +8,4 @@ from aw_nas.objective.language import LanguageObjective
 from aw_nas.objective.fault_injection import FaultInjectionObjective
 from aw_nas.objective.ofa import OFAClassificationObjective
 from aw_nas.objective.ssd import SSDObjective
+from aw_nas.objective.fpn import FPNObjective

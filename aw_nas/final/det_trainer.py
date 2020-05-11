@@ -72,7 +72,6 @@ class DetectionFinalTrainer(OFAFinalTrainer): #pylint: disable=too-many-instance
         self.predictor = self.objective.predictor
         self._criterion = self.objective._criterion
         self.softmax = nn.Softmax(dim=-1).to(self.device)
-        self.dataset.priors = self.dataset.priors.to(self.device)
 
         if eval_dir is None:
             eval_dir = os.environ['HOME']
@@ -80,6 +79,31 @@ class DetectionFinalTrainer(OFAFinalTrainer): #pylint: disable=too-many-instance
             eval_dir = os.path.join(eval_dir, '.det_exp', str(pid))
             os.makedirs(eval_dir, exist_ok=True)
         self.eval_dir = eval_dir
+
+        _splits = self.dataset.splits()
+
+        def collate_fn(batch):
+            from torch.utils.data._utils.collate import default_collate
+            elem = batch[0]
+            if isinstance(elem, tuple):
+                return [[e[i] for e in batch] for i in range(len(elem))]
+            return default_collate(batch)
+            
+        if self.multiprocess:
+            self.train_queue = torch.utils.data.DataLoader(
+                _splits["train"], batch_size=batch_size, pin_memory=True,
+                num_workers=workers_per_queue,
+                sampler=DistributedSampler(_splits["train"], shuffle=True), collate_fn=collate_fn)
+            self.valid_queue = torch.utils.data.DataLoader(
+                _splits["test"], batch_size=batch_size, pin_memory=True,
+                num_workers=workers_per_queue, shuffle=False, collate_fn=collate_fn)
+        else:
+            self.train_queue = torch.utils.data.DataLoader(
+                _splits["train"], batch_size=batch_size, pin_memory=True,
+                num_workers=workers_per_queue, shuffle=True, collate_fn=collate_fn)
+            self.valid_queue = torch.utils.data.DataLoader(
+                _splits["test"], batch_size=batch_size, pin_memory=True,
+                num_workers=workers_per_queue, shuffle=False, collate_fn=collate_fn)
 
     def _init_optimizer(self):
         optim_cls = getattr(torch.optim, self.optimizer_type)
@@ -108,8 +132,8 @@ class DetectionFinalTrainer(OFAFinalTrainer): #pylint: disable=too-many-instance
         return optimizer
 
     def evaluate_split(self, split):
-        if len(self.gpus) >= 2:
-            self._forward_once_for_flops(self.model)
+        # if len(self.gpus) >= 2:
+        #     self._forward_once_for_flops(self.model)
         assert split in {"train", "test"}
         if split == "test":
             queue = self.valid_queue
@@ -171,18 +195,17 @@ class DetectionFinalTrainer(OFAFinalTrainer): #pylint: disable=too-many-instance
 
         results = []
         for step, (ids, inputs, target) in enumerate(train_queue):
-            inputs = inputs.to(device)
-            target = [t.to(device) for t in target]
+            inputs = torch.stack(inputs, 0).to(device)
 
             optimizer.zero_grad()
             confidence, locations = model.forward(inputs)
-            regression_loss, classification_loss = criterion((locations, confidence), target)
+            regression_loss, classification_loss, matched_target = criterion((locations, confidence), target)
             loss = regression_loss + classification_loss
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), self.grad_clip)
             optimizer.step()
-            keep = (target[1] > 0).reshape(-1)
-            prec1, prec5 = utils.accuracy(confidence.reshape(-1, confidence.shape[-1])[keep], target[1].reshape(-1)[keep], topk=(1, 5))
+            keep = (matched_target[1] > 0).reshape(-1)
+            prec1, prec5 = utils.accuracy(confidence.reshape(-1, confidence.shape[-1])[keep], matched_target[1].reshape(-1)[keep], topk=(1, 5))
 
             n = inputs.size(0)
             cls_objs.update(classification_loss.item(), n)
@@ -210,22 +233,21 @@ class DetectionFinalTrainer(OFAFinalTrainer): #pylint: disable=too-many-instance
             num_images = len(valid_queue) * valid_queue.batch_size
             all_boxes = [[[] for _ in range(num_images)] for _ in range(self.model.num_classes)]
             for step, (ids, inputs, target, heights, widths) in enumerate(valid_queue):
-                inputs = inputs.to(device)
-                labels, gt_locations = target = [t.to(device) for t in target]
+                inputs = torch.stack(inputs, 0).to(device)
 
                 confidence, locations = model.forward(inputs)
-                regression_loss, classification_loss = criterion((locations, confidence), target)
-                keep = (target[1] > 0).reshape(-1)
-                perfs = self._perf_func(inputs, confidence.reshape(-1, confidence.shape[-1])[keep], target[1].reshape(-1)[keep], model)
+                regression_loss, classification_loss, matched_target = criterion((locations, confidence), target)
+                keep = (matched_target[1] > 0).reshape(-1)
+                perfs = self._perf_func(inputs, confidence.reshape(-1, confidence.shape[-1])[keep], matched_target[1].reshape(-1)[keep], model)
                 objective_perfs.update(dict(zip(self._perf_names, perfs)))
-                prec1, prec5 = utils.accuracy(confidence.reshape(-1, confidence.shape[-1])[keep], target[1].reshape(-1)[keep], topk=(1, 5))
+                prec1, prec5 = utils.accuracy(confidence.reshape(-1, confidence.shape[-1])[keep], matched_target[1].reshape(-1)[keep], topk=(1, 5))
                 n = inputs.size(0)
                 cls_objs.update(classification_loss.item(), n)
                 loc_objs.update(regression_loss.item(), n)
                 top1.update(prec1.item(), n)
                 top5.update(prec5.item(), n)
 
-                detections = self.predictor(self.softmax(confidence), locations).data
+                detections = self.predictor(confidence, locations).data
                 for batch_id, (_id, h, w) in enumerate(zip(ids, heights, widths)):
                     for j in range(1, detections.size(1)):
                         dets = detections[batch_id, j, :]

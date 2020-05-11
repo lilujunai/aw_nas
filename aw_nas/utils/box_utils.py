@@ -1,10 +1,12 @@
 import collections
-import torch
 import itertools
+import math
 
 import numpy as np
-import math
-from aw_nas.utils.nms import nms
+import torch
+import torch.nn as nn
+
+from aw_nas.utils import nms
 
 
 # Adapted from https://github.com/Hakuyume/chainer-ssd
@@ -171,6 +173,22 @@ def iou_of(boxes0, boxes1, eps=1e-5):
     area0 = area_of(boxes0[..., :2], boxes0[..., 2:])
     area1 = area_of(boxes1[..., :2], boxes1[..., 2:])
     return overlap_area / (area0 + area1 - overlap_area + eps)
+
+def calc_iou(a, b):
+    # a(anchor) [boxes, (y1, x1, y2, x2)]
+    # b(gt, coco-style) [boxes, (x1, y1, x2, y2)]
+
+    area = (b[:, 2] - b[:, 0]) * (b[:, 3] - b[:, 1])
+    iw = torch.min(torch.unsqueeze(a[:, 3], dim=1), b[:, 2]) - torch.max(torch.unsqueeze(a[:, 1], 1), b[:, 0])
+    ih = torch.min(torch.unsqueeze(a[:, 2], dim=1), b[:, 3]) - torch.max(torch.unsqueeze(a[:, 0], 1), b[:, 1])
+    iw = torch.clamp(iw, min=0)
+    ih = torch.clamp(ih, min=0)
+    ua = torch.unsqueeze((a[:, 2] - a[:, 0]) * (a[:, 3] - a[:, 1]), dim=1) + area - iw * ih
+    ua = torch.clamp(ua, min=1e-8)
+    intersection = iw * ih
+    IoU = intersection / ua
+
+    return IoU
 
 def intersect(box_a, box_b):
     """ We resize both tensors to [A,B,2] without new malloc:

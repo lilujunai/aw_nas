@@ -38,9 +38,39 @@ def SeperableConv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=
         nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=1),
     )
 
+class Classifier(nn.Module):
+    def __init__(self, in_channels, num_anchors, num_classes, num_layers, onnx_export=False):
+        super(Classifier, self).__init__()
+        self.num_anchors = num_anchors
+        self.num_classes = num_classes
+        self.num_layers = num_layers
+        self.conv_list = nn.ModuleList([
+                SeperableConv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1, relu6=True) for i in range(num_layers)
+            ])
+
+        self.bn_list = nn.ModuleList([
+            nn.ModuleList([
+                nn.BatchNorm2d(in_channels, momentum=0.01, eps=1e-3) for i in range(num_layers)
+            ]) 
+            for j in range(5)
+        ])
+        self.header = SeperableConv2d(in_channels, num_classes * num_anchors, kernel_size=3, stride=1, padding=1, relu6=True)
+        self.swish = ops.get_op("h_swish")(inplace=True)
+
+    def forward(self, inputs):
+        feats = []
+        for feat, bn_list in zip(inputs, self.bn_list):
+            for i, bn, conv in zip(range(self.num_layers), bn_list, self.conv_list):
+                feat = conv(feat)
+                feat = bn(feat)
+                feat = self.swish(feat)
+            feat = self.header(feat)
+            feats.append(feat)
+
+        return feats
 
 
-def generate_headers_bifpn(num_classes, in_channels, bifpn_out_channels, aspect_ratios=[2, 3], attention=True, repeat=3, num_layers=4, device=None, **kwargs):
+def generate_headers_bifpn(num_classes, in_channels, bifpn_out_channels, attention=True, repeat=3, num_layers=4, device=None, **kwargs):
     '''
     Args:
         num_class:          分类类别的数量
@@ -58,18 +88,10 @@ def generate_headers_bifpn(num_classes, in_channels, bifpn_out_channels, aspect_
 
     # regression & classification 共享权重，因此只有一个
     # TODO: 他们共享权重，但是应该不共享bn？
-    ratios = len(aspect_ratios) * 2 + 2
+    ratios = 9
 
-    regression_headers = nn.ModuleList([
-        nn.Sequential(
-            *[SeperableConv2d(bifpn_out_channels, out_channels=bifpn_out_channels, kernel_size=3, padding=1) for m in range(num_layers)] + [SeperableConv2d(bifpn_out_channels, out_channels=ratios * 4, kernel_size=3, padding=1)]
-        ) for m in range(5)]
-    )
-    classification_headers = nn.ModuleList([
-        nn.Sequential(
-            *[SeperableConv2d(bifpn_out_channels, out_channels=bifpn_out_channels, kernel_size=3, padding=1) for m in range(num_layers)] + [SeperableConv2d(bifpn_out_channels, out_channels=ratios * num_classes, kernel_size=3, padding=1)]
-        ) for m in range(5)]
-    )
+    regression_headers = Classifier(bifpn_out_channels, ratios, 4, num_layers)
+    classification_headers = Classifier(bifpn_out_channels, ratios, num_classes, num_layers)
 
     return extras, regression_headers, classification_headers
 
@@ -80,11 +102,11 @@ class EfficientDetHeadFinalModel(FinalModel):
     def __new__(self, device, num_classes, 
                  feature_channels,
                  channels,
-                 aspect_ratios,
                  attention,
                  repeat,
+                 num_layers,
                  schedule_cfg=None):
-        extras, regression_headers, classification_headers = generate_headers_bifpn(num_classes, feature_channels, channels, aspect_ratios, attention, repeat, device=device)
+        extras, regression_headers, classification_headers = generate_headers_bifpn(num_classes, feature_channels, channels, attention, repeat, num_layers, device=device)
         self.device = device
         self.num_classes = num_classes
 

@@ -160,8 +160,9 @@ class OFAFinalTrainer(FinalTrainer): #pylint: disable=too-many-instance-attribut
             m_path = os.path.join(path, "model_state.pt")
             self._load_state_dict(m_path)
         else:
-            self.model.load_state_dict(torch.load(
+            res = self.model.load_state_dict(torch.load(
                 m_path, map_location=torch.device("cpu")), strict=False)
+            s
 
         self.model.to(self.device)
         self._parallelize()
@@ -252,20 +253,8 @@ class OFAFinalTrainer(FinalTrainer): #pylint: disable=too-many-instance-attribut
         if extra_keys:
             self.logger.error("%d extra keys in checkpoint! "
                               "Make sure the genotype match", len(extra_keys))
-        missing_keys = {key for key in set(self.model.state_dict().keys())\
-                        .difference(checkpoint.keys()) \
-                        if "auxiliary" not in key}
-        if missing_keys:
-            self.logger.error(("{} missing keys will not be loaded! Check your genotype, "
-                               "This should be due to you're using the state dict dumped by"
-                               " `awnas eval-arch --save-state-dict` in an old version, "
-                               "and your genotype actually skip some "
-                               "cells, which might means, many parameters of your "
-                               "sub-network is not actually active, "
-                               "and this genotype might not be so effective.")
-                              .format(len(missing_keys)))
-            self.logger.error(str(missing_keys))
-        self.model.load_state_dict(checkpoint, strict=False)
+        mismatch = self.model.load_state_dict(checkpoint, strict=False)
+        self.logger.info(mismatch)
 
     def _parallelize(self):
         if len(self.gpus) >= 2:

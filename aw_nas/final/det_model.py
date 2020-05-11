@@ -71,12 +71,12 @@ class EfficientDetHeadModel(nn.Module):
         expect(isinstance(features, (list, tuple)), 'features must be a series of feature.', ValueError)
         output_features = self.extras(features)
 
-        confidences = []
-        locations = []
-        # 与SSD不同的地方在于此处只有一个regression header, 一个classification header
-        for feat, l, c in zip(output_features, self.regression_headers, self.classification_headers):
-            locations.append(l(feat).permute(0, 2, 3, 1).contiguous())
-            confidences.append(c(feat).permute(0, 2, 3, 1).contiguous())
+        confidences = self.classification_headers(output_features)
+        locations = self.regression_headers(output_features)
+
+        confidences = [c.permute(0, 2, 3, 1).contiguous() for c in confidences]
+        locations = [l.permute(0, 2, 3, 1).contiguous() for l in locations]
+        
 
         locations = torch.cat([t.view(t.size(0), -1) for t in locations], 1).view(features[0].shape[0], -1, 4)
         confidences = torch.cat([t.view(t.size(0), -1) for t in confidences], 1).view(features[0].shape[0], -1, self.num_classes)

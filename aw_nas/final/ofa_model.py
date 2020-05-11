@@ -58,10 +58,12 @@ class OFAGenotypeModel(FinalModel):
         return self.backbone.get_feature_channel_num(p_level)
     
     def load_state_dict(self, model, strict=True):
-        try:
-            return self.load_state_dict(model, strict)
-        except:
-            return self.backbone.load_state_dict(model, strict)
+        keys = model.keys()
+        for key in keys:
+            if key.startswith('backbone'):
+                return self.load_state_dict(model, strict)
+            else:
+                return self.backbone.load_state_dict(model, strict)
 
     def load_ofa_state_dict(self, ofa_state_dict, strict=True):
         """

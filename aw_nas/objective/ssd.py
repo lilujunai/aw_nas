@@ -17,26 +17,33 @@ from aw_nas.utils import box_utils
 class SSDObjective(BaseObjective):
     NAME = "ssd_detection"
 
-    def __init__(self, search_space, num_classes=21, nms_threshold=0.5):
+    def __init__(self, search_space, num_classes=21,
+                 min_dim=300,
+                 feature_maps=[19, 10, 5, 3, 2, 1],
+                 aspect_ratios=[[2, 3], [2,3], [2,3], [2,3], [2], [2]],
+                 steps=[16, 32, 64, 100, 150, 300],
+                 scales=[45, 90, 135, 180, 225, 270, 315],
+                 clip=True,
+                 center_variance=0.1,
+                 size_variance=0.2,
+                 nms_threshold=0.5):
         super(SSDObjective, self).__init__(search_space)
         self.num_classes = num_classes
-
-        min_dim=300
-        feature_maps=[38, 19, 10, 5, 3]
-        aspect_ratios=[[2, 3], [2,3], [2,3], [2,3], [2, 3]]
-        steps=[8, 16, 32, 64, 100]
-        scales=[21, 45, 90, 135, 180, 225]
-        clip=True
-        center_variance=0.1 
-        size_variance=0.2
+        
         self.priors = PriorBox(min_dim, aspect_ratios, feature_maps, scales, steps, (center_variance, size_variance), clip).forward()
-        # self.target_transform = TargetTransform(self.priors, 0.5,  (center_variance, size_variance))
+        self.target_transform = TargetTransform(self.priors, 0.5,  (center_variance, size_variance))
         self.box_loss = MultiBoxLoss(num_classes, nms_threshold, True, 0, True, 3, 1 - nms_threshold, False)
         self.predictor = PredictModel(num_classes, 0, 200, 0.01, nms_threshold, priors=self.priors)
 
     @classmethod
     def supported_data_types(cls):
         return ["image"]
+
+    def batch_transform(self, annotations, device=None):
+        targets = [self.target_transform(*target) for target in annotations]
+        boxes = torch.stack([t[0] for t in targets]).to(device)
+        labels = torch.stack([t[1] for t in targets]).to(device)
+        return (boxes, labels)
 
     def perf_names(self):
         return ["acc"]
@@ -61,10 +68,10 @@ class SSDObjective(BaseObjective):
         """
         raise NotImplementedError
 
-    def _criterion(self, outputs, targets):
-        # boxes, labels = targets
-        # loc_t, conf_t = self.target_transform(boxes, labels)
-        return self.box_loss(outputs, targets)
+    def _criterion(self, outputs, annotations):
+        import ipdb; ipdb.set_trace()
+        targets = self.batch_transform(annotations, outputs[0].device)
+        return self.box_loss(outputs, targets) + (targets,)
 
 
 class MultiBoxLoss(nn.Module):
@@ -91,7 +98,7 @@ class MultiBoxLoss(nn.Module):
     """
 
     def __init__(self, num_classes, overlap_thresh, prior_for_matching,
-                 bkg_label, neg_mining, neg_pos, neg_overlap, encode_target, variance=(0.1, 0.2), device=None):
+                 bkg_label, neg_mining, neg_pos, neg_overlap, encode_target, variance=(0.1, 0.2), priors=None, device=None):
         super(MultiBoxLoss, self).__init__()
         self.num_classes = num_classes
         self.threshold = overlap_thresh
@@ -102,6 +109,7 @@ class MultiBoxLoss(nn.Module):
         self.negpos_ratio = neg_pos
         self.neg_overlap = neg_overlap
         self.variance = variance
+        self.priors = priors
         self.device = device
 
     def forward(self, predictions, targets):
