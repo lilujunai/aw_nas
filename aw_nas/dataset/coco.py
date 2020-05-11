@@ -391,35 +391,27 @@ class COCODataset(BaseDataset):
 
     def __init__(self, load_train_only=False, class_name_file=None,
                  random_choose=False, random_seed=123,
-                 min_dim=300,
-                 feature_maps=[19, 10, 5, 3, 2, 1], aspect_ratios=[[2], [2,3], [2,3], [2,3], [2], [2]],
-                 steps=[16, 32, 64, 100, 150, 300],
-                 scales=[45, 90, 135, 180, 225, 270, 315],
-                 clip=True,
                  train_sets=[("2017", "train")],
                  test_sets=[("2017", "val")],
+                 normalize=False,
                  train_crop_size=300, test_crop_size=300, image_mean=(103.94, 116.78, 123.68), image_std=128.,
-                 center_variance=0.1, size_variance=0.2, iou_threshold=0.5, keep_difficult=False):
+                 iou_threshold=0.5, keep_difficult=False):
         super(COCODataset, self).__init__()
         self.load_train_only = load_train_only
         self.train_data_dir = self.data_dir
         self.class_name_file = class_name_file
 
-        self.center_variance = center_variance
-        self.size_variance = size_variance
         self.iou_threshold = iou_threshold
 
-        self.priors = PriorBox(min_dim, aspect_ratios, feature_maps, scales, steps, (center_variance, size_variance), clip).forward()
-        train_transform = TrainAugmentation(train_crop_size, np.array(image_mean), image_std)
-        target_transform = TargetTransform(self.priors, self.iou_threshold, (center_variance, size_variance))
-        test_transform = TestTransform(test_crop_size, np.array(image_mean), image_std)
+        train_transform = TrainAugmentation(train_crop_size, np.array(image_mean), image_std, normalize)
+        test_transform = TestTransform(test_crop_size, np.array(image_mean), image_std, normalize)
 
         self.datasets = {}
-        self.datasets['train'] = COCODetection(self.train_data_dir, train_sets, train_transform, target_transform)
+        self.datasets['train'] = COCODetection(self.train_data_dir, train_sets, train_transform)
 
         if not self.load_train_only:
             self.test_data_dir = self.data_dir
-            self.datasets['test'] = COCODetection(self.test_data_dir, test_sets, test_transform, target_transform, is_test=True)
+            self.datasets['test'] = COCODetection(self.test_data_dir, test_sets, test_transform, is_test=True)
 
     def splits(self):
         return self.datasets

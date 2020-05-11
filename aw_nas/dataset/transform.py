@@ -4,7 +4,7 @@ from aw_nas.dataset.voc_data_augmentation import Preproc
 from aw_nas.utils.box_utils import match
 
 class TrainAugmentation:
-    def __init__(self, size, mean=(104, 117, 123), std=1.0):
+    def __init__(self, size, mean=(104, 117, 123), std=1.0, normalize=False, normalize_box=True):
         """
         Args:
             size: the size the of final image.
@@ -12,7 +12,8 @@ class TrainAugmentation:
         """
         self.mean = mean
         self.size = size
-        self.preproc = Preproc(size, mean, 0.6)
+        self.std = std
+        self.preproc = Preproc(size, mean, std, 0.6, normalize, normalize_box)
 
     def __call__(self, img, boxes, labels):
         """
@@ -25,8 +26,8 @@ class TrainAugmentation:
 
 
 class TestTransform:
-    def __init__(self, size, mean=0.0, std=1.0):
-        self.preproc = Preproc(size, mean, -1)
+    def __init__(self, size, mean=0.0, std=1.0, normalize=False, normalize_box=True):
+        self.preproc = Preproc(size, mean, std, -1, normalize, normalize_box)
 
     def __call__(self, image, boxes, labels):
         return self.preproc(image, boxes, labels)

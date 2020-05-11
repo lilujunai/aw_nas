@@ -181,12 +181,15 @@ def _elastic(image, p, alpha=None, sigma=None, random_state=None):
     return cv2.remap(image, x, y, interpolation=cv2.INTER_LINEAR, borderValue= 0, borderMode=cv2.BORDER_REFLECT)
 
 
-def preproc_for_test(image, insize, mean):
+def preproc_for_test(image, insize, mean, std, normalize=False):
     interp_methods = [cv2.INTER_LINEAR, cv2.INTER_CUBIC, cv2.INTER_AREA, cv2.INTER_NEAREST, cv2.INTER_LANCZOS4]
     interp_method = interp_methods[random.randrange(5)]
     image = cv2.resize(image, (insize, insize), interpolation=interp_method)
     image = image.astype(np.float32)
+    if normalize:
+        image = image / 255.
     image -= mean
+    image /= std
     return image.transpose(2, 0, 1)
 
 def draw_bbox(image, bbxs, color=(0, 255, 0)):
@@ -198,12 +201,15 @@ def draw_bbox(image, bbxs, color=(0, 255, 0)):
 
 class Preproc(object):
 
-    def __init__(self, resize, rgb_means, p, writer=None):
+    def __init__(self, resize, rgb_means, std, p, normalize=False, normalize_box=True, writer=None):
         self.means = rgb_means
+        self.std = std
         self.resize = resize
         self.p = p
         self.writer = writer # writer used for tensorboard visualization
         self.epoch = 0
+        self.normalize = normalize
+        self.normalize_box = normalize_box
 
     def __call__(self, image, boxes, labels):
         # some bugs
@@ -211,18 +217,22 @@ class Preproc(object):
             targets = np.zeros((1,5))
             targets[0] = image.shape[0]
             targets[0] = image.shape[1]
-            image = preproc_for_test(image, self.resize, self.means)
+            image = preproc_for_test(image, self.resize, self.means, self.std, self.normalize)
             return torch.from_numpy(image), targets[:, :-1], targets[:, -1]
 
         if len(boxes) == 0:
             targets = np.zeros((1,5))
-            image = preproc_for_test(image, self.resize, self.means) # some ground truth in coco do not have bounding box! weird!
+            image = preproc_for_test(image, self.resize, self.means, self.std, self.normalize) # some ground truth in coco do not have bounding box! weird!
             return torch.from_numpy(image), targets[:, :-1], targets[:, -1]
         if self.p == -1: # eval
+            # TODO: 不太明白，这里的归一化并不是相对于300x300的，而是原图的？
             height, width, _ = image.shape
             boxes[:, 0::2] /= width
             boxes[:, 1::2] /= height
-            image = preproc_for_test(image, self.resize, self.means)
+            if not self.normalize_box:
+                boxes[:, 0::2] *= self.resize
+                boxes[:, 1::2] *= self.resize
+            image = preproc_for_test(image, self.resize, self.means, self.std, self.normalize)
             return torch.from_numpy(image), boxes, labels
 
         targets = np.concatenate([boxes, labels.reshape(-1, 1)], 1)
@@ -233,6 +243,9 @@ class Preproc(object):
         labels_o = targets_o[:,-1]
         boxes_o[:, 0::2] /= width_o
         boxes_o[:, 1::2] /= height_o
+        if not self.normalize_box:
+            boxes_o[:, 0::2] *= self.resize
+            boxes_o[:, 1::2] *= self.resize
         # labels_o = np.expand_dims(labels_o, 1)
 
         if self.writer is not None:
@@ -249,7 +262,11 @@ class Preproc(object):
             image_show = draw_bbox(image_t, boxes)
             self.writer.add_image('preprocess/distort_image', image_show, self.epoch)
 
-        image_t, boxes = _expand(image_t, boxes, self.means, self.p)
+        if self.normalize:
+            means = self.means * 255
+        else:
+            means = self.means
+        image_t, boxes = _expand(image_t, boxes, means, self.p)
         if self.writer is not None:
             image_show = draw_bbox(image_t, boxes)
             self.writer.add_image('preprocess/expand_image', image_show, self.epoch)
@@ -263,7 +280,7 @@ class Preproc(object):
             self.release_writer()
 
         height, width, _ = image_t.shape
-        image_t = preproc_for_test(image_t, self.resize, self.means)
+        image_t = preproc_for_test(image_t, self.resize, self.means, self.std, self.normalize)
         boxes = boxes.copy()
         boxes[:, 0::2] /= width
         boxes[:, 1::2] /= height
@@ -272,9 +289,12 @@ class Preproc(object):
         mask_b= np.minimum(b_w, b_h) > 0.01
         boxes_t = boxes[mask_b]
         labels_t = labels[mask_b].copy()
+        if not self.normalize_box:
+            boxes_t[:, 0::2] *= self.resize
+            boxes_t[:, 1::2] *= self.resize
 
         if len(boxes_t)==0:
-            image = preproc_for_test(image_o, self.resize, self.means)
+            image = preproc_for_test(image_o, self.resize, self.means, self.std, self.normalize)
             return torch.from_numpy(image), boxes_o, labels_o
 
         # labels_t = np.expand_dims(labels_t, 1)

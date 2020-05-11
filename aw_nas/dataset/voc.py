@@ -150,37 +150,28 @@ class VOC(BaseDataset):
 
     def __init__(self, load_train_only=False, class_name_file=None,
                  random_choose=False, random_seed=123,
-                 min_dim=300,
-                 feature_maps=[19, 10, 5, 3, 2, 1], aspect_ratios=[[2], [2,3], [2,3], [2,3], [2], [2]],
-                 steps=[16, 32, 64, 100, 150, 300],
-                 scales=[45, 90, 135, 180, 225, 270, 315],
-                 clip=True,
                  train_sets=[("VOC2007", "trainval"), ("VOC2012", "trainval")],
                  test_sets=[("VOC2007", "test")],
-                 train_crop_size=300, test_crop_size=300, image_mean=(103.94, 116.78, 123.68), image_std=128.,
-                 center_variance=0.1, size_variance=0.2, iou_threshold=0.5, keep_difficult=False, relative_dir=None):
+                 normalize=False, normalize_box=True,
+                 train_crop_size=300, test_crop_size=300, image_mean=(103.94, 116.78, 123.68), image_std=1.,
+                 iou_threshold=0.5, keep_difficult=False, relative_dir=None):
         super(VOC, self).__init__(relative_dir)
         self.load_train_only = load_train_only
         self.train_data_dir = os.path.join(self.data_dir, "train")
         self.class_name_file = class_name_file
+        self.normalize = normalize
+        self.normalize_box = normalize_box
 
-
-        self.priors = PriorBox(min_dim, aspect_ratios, feature_maps, scales, steps, (center_variance, size_variance), clip).forward()
-        self.center_variance = center_variance
-        self.size_variance = size_variance
-        self.iou_threshold = iou_threshold
-
-        train_transform = TrainAugmentation(train_crop_size, np.array(image_mean), image_std)
-        target_transform = TargetTransform(self.priors, self.iou_threshold, (center_variance, size_variance))
-        test_transform = TestTransform(test_crop_size, np.array(image_mean), image_std)
+        train_transform = TrainAugmentation(train_crop_size, np.array(image_mean), np.array(image_std), normalize, normalize_box)
+        test_transform = TestTransform(test_crop_size, np.array(image_mean), np.array(image_std), normalize, normalize_box)
 
         self.datasets = {}
-        self.datasets['train'] = VOCDataset(self.train_data_dir, train_sets, train_transform, target_transform)
+        self.datasets['train'] = VOCDataset(self.train_data_dir, train_sets, train_transform)
         self.grouped_annotation = {}
 
         if not self.load_train_only:
             self.test_data_dir = os.path.join(self.data_dir, "test")
-            self.datasets['test'] = VOCDataset(self.test_data_dir, test_sets, test_transform, target_transform, is_test=True)
+            self.datasets['test'] = VOCDataset(self.test_data_dir, test_sets, test_transform, is_test=True)
 
     def splits(self):
         return self.datasets
