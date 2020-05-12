@@ -69,7 +69,6 @@ class SSDObjective(BaseObjective):
         raise NotImplementedError
 
     def _criterion(self, outputs, annotations):
-        import ipdb; ipdb.set_trace()
         targets = self.batch_transform(annotations, outputs[0].device)
         return self.box_loss(outputs, targets) + (targets,)
 

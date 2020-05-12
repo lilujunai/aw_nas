@@ -89,7 +89,6 @@ class PredictModel(nn.Module):
         output = torch.zeros(num, self.num_classes + 1, self.top_k, 5)
         
         # decode boxes
-        # import ipdb; ipdb.set_trace()
         decoded_boxes = self.bbox_transform(self.anchors, regressions)
         decoded_boxes = self.cliper(decoded_boxes, self.crop_size, self.crop_size) / self.crop_size
 
@@ -122,7 +121,7 @@ class PredictModel(nn.Module):
 class FocalLoss(nn.Module):
     def __init__(self, anchors, alpha=0.25, gamma=2.0):
         super(FocalLoss, self).__init__()
-        self.alpha = alpha 
+        self.alpha = alpha
         self.gamma = gamma
         self.anchors = anchors
 
@@ -139,7 +138,6 @@ class FocalLoss(nn.Module):
 
         anchor = self.anchors.to(device) # assuming all image sizes are the same, which it is
         dtype = self.anchors.dtype
-
         anchor_widths = anchor[:, 3] - anchor[:, 1]
         anchor_heights = anchor[:, 2] - anchor[:, 0]
         anchor_ctr_x = anchor[:, 1] + 0.5 * anchor_widths
@@ -153,8 +151,10 @@ class FocalLoss(nn.Module):
             regression = regressions[j, :, :]
 
             boxes, labels = annotations[j]
-            labels -= 1
+            assert all(labels > 0) and all(labels <= 20)
+            labels = labels - 1
             bbox_annotation = torch.from_numpy(np.concatenate((boxes, labels.reshape(-1, 1)), axis=1)).to(dtype).to(device)
+            # bbox_annotation = annotations[j]
             bbox_annotation = bbox_annotation[bbox_annotation[:, 4] != -1]
 
             classification = torch.clamp(classification, 1e-4, 1.0 - 1e-4)
@@ -207,7 +207,11 @@ class FocalLoss(nn.Module):
             zeros = torch.zeros_like(cls_loss)
 
             cls_loss = torch.where(torch.ne(targets, -1.0), cls_loss, zeros)
-            conf_t.append(targets.argmax(1).unsqueeze(0))
+            ct = torch.ones([1, targets.shape[0]]).long().to(device) * -1
+            if positive_indices.sum() > 0:
+                ct[0, positive_indices] = targets[positive_indices].argmax(1)
+            conf_t.append(ct)
+            
 
             classification_losses.append(cls_loss.sum() / torch.clamp(num_positive_anchors.to(dtype).to(device), min=1.0))
 
