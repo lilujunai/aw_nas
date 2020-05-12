@@ -97,12 +97,14 @@ class PredictModel(nn.Module):
         self.nms_thresh = nms_thresh
         self.variance = variance
         self.priors = priors
+        self.softmax = torch.nn.Softmax(dim=-1)
 
     def forward(self, confidences, locations):
         priors = self.priors.to(confidences.device)
         num = confidences.size(0)  # batch size
         num_priors = priors.size(0)
         output = torch.zeros(num, self.num_classes, self.top_k, 5)
+        confidences = self.softmax(confidences)
         conf_preds = confidences.view(num, num_priors,
                                       self.num_classes).transpose(2, 1)
 
