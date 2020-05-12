@@ -231,10 +231,9 @@ class DetectionFinalTrainer(OFAFinalTrainer): #pylint: disable=too-many-instance
         context = torch.no_grad if self.eval_no_grad else nullcontext
         with context():
             num_images = len(valid_queue) * valid_queue.batch_size
-            all_boxes = [[[] for _ in range(num_images)] for _ in range(self.model.num_classes)]
+            all_boxes = [[[] for _ in range(num_images)] for _ in range(self.model.num_classes+1)]
             for step, (ids, inputs, target, heights, widths) in enumerate(valid_queue):
                 inputs = torch.stack(inputs, 0).to(device)
-
                 confidence, locations = model.forward(inputs)
                 regression_loss, classification_loss, matched_target = criterion((locations, confidence), target)
                 keep = (matched_target[1] > 0).reshape(-1)

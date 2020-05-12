@@ -23,6 +23,7 @@ class FPNObjective(BaseObjective):
     def __init__(self, search_space, num_classes=21, 
                  pyramid_levels=[3, 4, 5, 6, 7],
                  crop_size=300,
+                 top_k=200,
                  scales=[2 ** 0, 2 ** (1.0 / 3.0), 2 ** (2.0 / 3.0)],
                  ratios=[(1.0, 1.0), (1.4, 0.7), (0.7, 1.4)],
                  nms_threshold=0.5):
@@ -31,8 +32,7 @@ class FPNObjective(BaseObjective):
 
         self.anchors = Anchors(pyramid_levels=pyramid_levels, scales=scales, ratios=ratios).forward((crop_size, crop_size))
         self.focal_loss = FocalLoss(self.anchors)
-        # self.predictor = PredictModel(num_classes, 0, 200, 0.01, nms_threshold, variance=(1.0, 1.0), priors=self.anchors)
-        self.predictor = PredictModel(self.anchors.unsqueeze(0), num_classes, 200, 0.05, nms_threshold, crop_size)
+        self.predictor = PredictModel(self.anchors.unsqueeze(0), num_classes, top_k, 0.05, nms_threshold, crop_size)
 
     @classmethod
     def supported_data_types(cls):
@@ -74,46 +74,27 @@ class PredictModel(nn.Module):
         self.confidence_thresh = confidence_thresh
         self.nms_thresh = nms_thresh
         self.crop_size = crop_size
+        self.bbox_transform = box_utils.BBoxTransform()
+        self.cliper = box_utils.ClipBoxes()
 
     def forward(self, confidences, regressions):
         # anchor is not normalized
         self.anchors = self.anchors.to(confidences.device)
-        y_centers_a = (self.anchors[..., 0] + self.anchors[..., 2]) / 2
-        x_centers_a = (self.anchors[..., 1] + self.anchors[..., 3]) / 2
-        ha = self.anchors[..., 2] - self.anchors[..., 0]
-        wa = self.anchors[..., 3] - self.anchors[..., 1]
-
+        
         num = confidences.shape[0]
-        confidences = confidences[:, :, 1:].sigmoid()
+        confidences = confidences.sigmoid()
         scores = torch.max(confidences, dim=2, keepdim=True)[0]
         scores_over_thresh = (scores > self.confidence_thresh)[:, :, 0]
 
         output = torch.zeros(num, self.num_classes + 1, self.top_k, 5)
         
         # decode boxes
-        # regression = regressions[i]
-        w = regressions[..., 3].exp() * wa
-        h = regressions[..., 2].exp() * ha
-
-        y_centers = regressions[..., 0] * ha + y_centers_a
-        x_centers = regressions[..., 1] * wa + x_centers_a
-
-        ymin = y_centers - h / 2.
-        xmin = x_centers - w / 2.
-        ymax = y_centers + h / 2.
-        xmax = x_centers + w / 2.
-
-        decoded_boxes = torch.stack([xmin, ymin, xmax, ymax], dim=2)
-
-        # clamp size
-        decoded_boxes[:, :, 0] = torch.clamp(decoded_boxes[:, :, 0], min=0) / self.crop_size
-        decoded_boxes[:, :, 1] = torch.clamp(decoded_boxes[:, :, 1], min=0) / self.crop_size
-
-        decoded_boxes[:, :, 2] = torch.clamp(decoded_boxes[:, :, 2], max=self.crop_size - 1) / self.crop_size
-        decoded_boxes[:, :, 3] = torch.clamp(decoded_boxes[:, :, 3], max=self.crop_size - 1) / self.crop_size
+        # import ipdb; ipdb.set_trace()
+        decoded_boxes = self.bbox_transform(self.anchors, regressions)
+        decoded_boxes = self.cliper(decoded_boxes, self.crop_size, self.crop_size) / self.crop_size
 
         for i in range(num):
-            scores_over_t = scores_over_thresh[i, :]
+            scores_over_t = scores_over_thresh[i]
             if scores_over_t.sum() == 0:
                 continue
             classification_per = confidences[i, scores_over_t, ...].permute(1, 0)
@@ -130,7 +111,7 @@ class PredictModel(nn.Module):
                 for idx in range(self.num_classes):
                     cls_idx = classes_ == idx
                     output[i, idx + 1, :cls_idx.sum()] = torch.cat(
-                        (scores_[cls_idx].unsqueeze(1), boxes_[cls_idx]),
+                        (scores_[cls_idx].unsqueeze(1)[:self.top_k], boxes_[cls_idx][:self.top_k]),
                         1
                     )
         return output
@@ -172,6 +153,7 @@ class FocalLoss(nn.Module):
             regression = regressions[j, :, :]
 
             boxes, labels = annotations[j]
+            labels -= 1
             bbox_annotation = torch.from_numpy(np.concatenate((boxes, labels.reshape(-1, 1)), axis=1)).to(dtype).to(device)
             bbox_annotation = bbox_annotation[bbox_annotation[:, 4] != -1]
 
@@ -190,8 +172,8 @@ class FocalLoss(nn.Module):
                 conf_t.append(torch.from_numpy(np.zeros_like(classification)).to(dtype).to(device).unsqueeze(0))
                 loc_t.append([])
                 regression_losses.append(torch.tensor(0).to(dtype).to(device))
-                classification_losses.append(cls_loss.sum() / torch.clamp(num_positive_anchors.to(dtype), min=1.0))
- 
+                classification_losses.append(cls_loss.sum())
+
                 continue
             
             IoU = box_utils.calc_iou(anchor[:, :], bbox_annotation[:, :4])

@@ -122,7 +122,7 @@ class COCODetection(data.Dataset):
         #              str(index).zfill(12) + '.jpg')
         # change Example image path for index=119993 to images/train2017/000000119993.jpg
         file_name = (str(index).zfill(12) + '.jpg')
-        image_path = os.path.join(self.root, 'images',
+        image_path = os.path.join(self.root,
                               name, file_name)
         assert os.path.exists(image_path), \
                 'Path does not exist: {}'.format(image_path)
@@ -227,12 +227,12 @@ class COCODetection(data.Dataset):
         height, width, _ = img.shape
 
         if self.preproc is not None:
-            image, boxes, labels = self.preproc(img, boxes, labels)
+            img, boxes, labels = self.preproc(img, boxes, labels)
 
         if self.target_transform is not None:
             (boxes, labels) = self.target_transform(boxes, labels)
         target = (boxes, labels)
-        return torch.tensor(image), target, height, width
+        return torch.tensor(img), target, height, width
 
     def __len__(self):
         return len(self.ids)
@@ -359,7 +359,7 @@ class COCODetection(data.Dataset):
             print('Collecting {} results ({:d}/{:d})'.format(cls, cls_ind,
                                                           self.num_classes ))
             coco_cat_id = self._class_to_coco_cat_id[cls]
-            results.extend(self._coco_results_one_category(all_boxes[cls_ind],
+            results.extend(self._coco_results_one_category(all_boxes[coco_cat_id],
                                                            coco_cat_id))
             '''
             if cls_ind ==30:
@@ -393,7 +393,7 @@ class COCODataset(BaseDataset):
                  random_choose=False, random_seed=123,
                  train_sets=[("2017", "train")],
                  test_sets=[("2017", "val")],
-                 normalize=False,
+                 normalize=False, normalize_box=True,
                  train_crop_size=300, test_crop_size=300, image_mean=(103.94, 116.78, 123.68), image_std=128.,
                  iou_threshold=0.5, keep_difficult=False):
         super(COCODataset, self).__init__()
@@ -403,14 +403,14 @@ class COCODataset(BaseDataset):
 
         self.iou_threshold = iou_threshold
 
-        train_transform = TrainAugmentation(train_crop_size, np.array(image_mean), image_std, normalize)
-        test_transform = TestTransform(test_crop_size, np.array(image_mean), image_std, normalize)
+        train_transform = TrainAugmentation(train_crop_size, np.array(image_mean), np.array(image_std), normalize, normalize_box)
+        test_transform = TestTransform(test_crop_size, np.array(image_mean), np.array(image_std), normalize, normalize_box)
 
         self.datasets = {}
         self.datasets['train'] = COCODetection(self.train_data_dir, train_sets, train_transform)
 
         if not self.load_train_only:
-            self.test_data_dir = self.data_dir
+            self.test_data_dir = self.data_dir 
             self.datasets['test'] = COCODetection(self.test_data_dir, test_sets, test_transform, is_test=True)
 
     def splits(self):

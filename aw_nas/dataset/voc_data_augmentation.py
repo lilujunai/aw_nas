@@ -190,7 +190,7 @@ def preproc_for_test(image, insize, mean, std, normalize=False):
         image = image / 255.
     image -= mean
     image /= std
-    return image.transpose(2, 0, 1)
+    return image[:, :, (2, 1, 0)].transpose(2, 0, 1)
 
 def draw_bbox(image, bbxs, color=(0, 255, 0)):
     img = image.copy()
