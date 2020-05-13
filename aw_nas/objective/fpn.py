@@ -82,7 +82,6 @@ class PredictModel(nn.Module):
         self.anchors = self.anchors.to(confidences.device)
         
         num = confidences.shape[0]
-        confidences = confidences.sigmoid()
         scores = torch.max(confidences, dim=2, keepdim=True)[0]
         scores_over_thresh = (scores > self.confidence_thresh)[:, :, 0]
 
@@ -129,7 +128,6 @@ class FocalLoss(nn.Module):
         alpha = self.alpha
         gamma = self.gamma
         regressions, classifications = predict
-        classifications = classifications.sigmoid()
         device = classifications.device
 
         batch_size = classifications.shape[0]
@@ -151,7 +149,6 @@ class FocalLoss(nn.Module):
             regression = regressions[j, :, :]
 
             boxes, labels = annotations[j]
-            assert all(labels > 0) and all(labels <= 20)
             labels = labels - 1
             bbox_annotation = torch.from_numpy(np.concatenate((boxes, labels.reshape(-1, 1)), axis=1)).to(dtype).to(device)
             # bbox_annotation = annotations[j]

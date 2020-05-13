@@ -24,7 +24,7 @@ from aw_nas.ops import MobileNetV3Block
 from aw_nas.utils import (RegistryMeta, box_utils, make_divisible, nms)
 from aw_nas.utils.common_utils import Context, nullcontext
 from aw_nas.utils.exception import ConfigException, expect
-from .ssd_bifpn import BiFPN
+from .ssd_bifpn import BiFPN, Conv2dStaticSamePadding
 
 
 # TODO: 确认是否要去掉bn
@@ -38,6 +38,46 @@ def SeperableConv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=
         nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=1),
     )
 
+class SeparableConvBlock(nn.Module):
+    """
+    created by Zylo117
+    """
+
+    def __init__(self, in_channels, out_channels=None, norm=True, activation=False, onnx_export=False):
+        super(SeparableConvBlock, self).__init__()
+        if out_channels is None:
+            out_channels = in_channels
+
+        # Q: whether separate conv
+        #  share bias between depthwise_conv and pointwise_conv
+        #  or just pointwise_conv apply bias.
+        # A: Confirmed, just pointwise_conv applies bias, depthwise_conv has no bias.
+
+        self.depthwise_conv = Conv2dStaticSamePadding(in_channels, in_channels,
+                                                      kernel_size=3, stride=1, groups=in_channels, bias=False)
+        self.pointwise_conv = Conv2dStaticSamePadding(in_channels, out_channels, kernel_size=1, stride=1)
+
+        self.norm = norm
+        if self.norm:
+            # Warning: pytorch momentum is different from tensorflow's, momentum_pytorch = 1 - momentum_tensorflow
+            self.bn = nn.BatchNorm2d(num_features=out_channels, momentum=0.01, eps=1e-3)
+
+        self.activation = activation
+        if self.activation:
+            self.swish = MemoryEfficientSwish() if not onnx_export else Swish()
+
+    def forward(self, x):
+        x = self.depthwise_conv(x)
+        x = self.pointwise_conv(x)
+
+        if self.norm:
+            x = self.bn(x)
+
+        if self.activation:
+            x = self.swish(x)
+
+        return x
+
 class Classifier(nn.Module):
     def __init__(self, in_channels, num_anchors, num_classes, num_layers, onnx_export=False):
         super(Classifier, self).__init__()
@@ -46,6 +86,7 @@ class Classifier(nn.Module):
         self.num_layers = num_layers
         self.conv_list = nn.ModuleList([
                 SeperableConv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1, relu6=True) for i in range(num_layers)
+                # SeparableConvBlock(in_channels, in_channels, norm=False, activation=False) for i in range(num_layers)
             ])
 
         self.bn_list = nn.ModuleList([
@@ -55,7 +96,8 @@ class Classifier(nn.Module):
             for j in range(5)
         ])
         self.header = SeperableConv2d(in_channels, num_classes * num_anchors, kernel_size=3, stride=1, padding=1, relu6=True)
-        self.swish = ops.get_op("h_swish")(inplace=True)
+        # self.header = SeparableConvBlock(in_channels, num_anchors * num_classes, norm=False, activation=False)
+        self.swish = ops.get_op("h_swish")(inplace=True) 
 
     def forward(self, inputs):
         feats = []
@@ -83,7 +125,7 @@ def generate_headers_bifpn(num_classes, in_channels, bifpn_out_channels, attenti
     '''
     # extras 可以级联的BiFPN, first_time参数会控制in_channels是否有用, True的时候有用否则没用
     extras = nn.Sequential(
-        *[BiFPN(bifpn_out_channels, in_channels, num == 0, attention) for num in range(repeat)]
+        *[BiFPN(bifpn_out_channels, in_channels, num == 0, epsilon=1e-4, attention=attention) for num in range(repeat)]
     )
 
     # regression & classification 共享权重，因此只有一个
@@ -148,7 +190,6 @@ class EfficientDetFinalModel(FinalModel):
 
         # 这里要给出所有的backbone中需要做BiFPN的特征维数，按照[p3, p4, p5]的顺序给出
         backbone_stage_channel = self.final_model.get_feature_channel_num(feature_levels)
-        self.norm = [ops.L2Norm(ch, 20) for ch in backbone_stage_channel]
         self.head = EfficientDetHeadFinalModel(device, num_classes, backbone_stage_channel, **head_cfg)
 
 
@@ -200,8 +241,9 @@ class EfficientDetFinalModel(FinalModel):
     def forward(self, inputs): #pylint: disable=arguments-differ
         # 这一句话就可以表示中间层的feature？？我默认了
         features, _ = self.final_model.get_features(inputs, self.feature_levels)
-
+        
         # 这里的输入是(p3, p4, p5)的feature map
         confidences, locations = self.head(features)
+        confidences = confidences.sigmoid()
 
         return confidences, locations
