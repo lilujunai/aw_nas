@@ -143,7 +143,7 @@ final_model_cfg:
 
 final_trainer_type: det_final_trainer
 final_trainer_cfg:
-  batch_size: 64
+  batch_size: 128
   epochs: 300
   optimizer_scheduler:
     eta_min: 0.01
@@ -151,10 +151,10 @@ final_trainer_cfg:
     type: CosineAnnealingLR
   schedule_cfg: null
   weight_decay: 0.0003
-  learning_rate: 0.00005
+  learning_rate: 0.0001
   momentum: 0.97
   freeze_base_net: false
-  base_net_lr: 0.00001
+  base_net_lr: 0.0001
   save_as_state_dict: true
   multiprocess: false 
   eval_every: 10
