@@ -28,6 +28,8 @@ dataset_cfg:
   train_crop_size: 300
   image_mean: [103.94, 116.78, 123.68]
   image_std: [1, 1, 1]
+  # image_mean: [0.406, 0.456, 0.485]
+  # image_std: [0.225, 0.224, 0.229]
   normalize: false
   normalize_box: true
 # ---- End Type cifar10 ----
@@ -139,7 +141,7 @@ final_model_cfg:
 
 final_trainer_type: det_final_trainer
 final_trainer_cfg:
-  batch_size: 32
+  batch_size: 128
   epochs: 300
   optimizer_scheduler:
     eta_min: 0.01

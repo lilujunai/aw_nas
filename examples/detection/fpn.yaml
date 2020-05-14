@@ -99,6 +99,7 @@ objective_cfg:
   ratios: [[1.0, 1.0], [1.4, 0.7], [0.7, 1.4]]
   crop_size: 512
   top_k: 200
+  confidence_thresh: 0.2
 
 ## ---- Component trainer ----
 # ---- Type simple ----
@@ -136,8 +137,8 @@ final_model_cfg:
   head_cfg:
     channels: 88
     attention: True
-    repeat: 4
-    num_layers: 3
+    repeat: 1
+    num_layers: 1
   backbone_state_dict_path: /home/tangchangcheng/scripts/mbv3_595M.pt
 
 

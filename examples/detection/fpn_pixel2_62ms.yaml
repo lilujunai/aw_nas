@@ -135,8 +135,8 @@ final_model_cfg:
   head_cfg:
     channels: 88
     attention: True
-    repeat: 4
-    num_layers: 3
+    repeat: 1
+    num_layers: 1
 
   backbone_state_dict_path: /home/tangchangcheng/scripts/pixel2_62ms/model.pt
 
@@ -151,10 +151,10 @@ final_trainer_cfg:
     type: CosineAnnealingLR
   schedule_cfg: null
   weight_decay: 0.0003
-  learning_rate: 0.0001
+  learning_rate: 0.00001
   momentum: 0.97
   freeze_base_net: false
-  base_net_lr: 0.0001
+  base_net_lr: 0.00001
   save_as_state_dict: true
   multiprocess: false 
   eval_every: 10
