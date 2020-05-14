@@ -85,8 +85,8 @@ class Classifier(nn.Module):
         self.num_classes = num_classes
         self.num_layers = num_layers
         self.conv_list = nn.ModuleList([
-                SeperableConv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1, relu6=True) for i in range(num_layers)
-                # SeparableConvBlock(in_channels, in_channels, norm=False, activation=False) for i in range(num_layers)
+                # SeperableConv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1, relu6=True) for i in range(num_layers)
+                SeparableConvBlock(in_channels, in_channels, norm=False, activation=False) for i in range(num_layers)
             ])
 
         self.bn_list = nn.ModuleList([
@@ -95,8 +95,8 @@ class Classifier(nn.Module):
             ]) 
             for j in range(5)
         ])
-        self.header = SeperableConv2d(in_channels, num_classes * num_anchors, kernel_size=3, stride=1, padding=1, relu6=True)
-        # self.header = SeparableConvBlock(in_channels, num_anchors * num_classes, norm=False, activation=False)
+        # self.header = SeperableConv2d(in_channels, num_classes * num_anchors, kernel_size=3, stride=1, padding=1, relu6=True)
+        self.header = SeparableConvBlock(in_channels, num_anchors * num_classes, norm=False, activation=False)
         self.swish = ops.get_op("h_swish")(inplace=True) 
 
     def forward(self, inputs):
@@ -159,6 +159,9 @@ class EfficientDetHeadFinalModel(FinalModel):
         return EfficientDetHeadModel(device, num_classes=num_classes,
                                             extras=extras, regression_headers=regression_headers, classification_headers=classification_headers)
 
+    @classmethod
+    def supported_data_types(cls):
+        return ["image"]
 
 class EfficientDetFinalModel(FinalModel):
     NAME = "efficientdet_final_model"

@@ -92,7 +92,7 @@ class FlexibleMobileNetV2Block(MobileNetV2Block, FlexibleBlock):
 
     def set_mask(self, expansion, kernel_size):
         mask = None
-        if expansion != self.expansion:
+        if expansion is not None and expansion != self.expansion:
             filters = self.point_linear[0].weight.data
             mask = _get_channel_mask(filters, self.C * expansion)
         if self.inv_bottleneck:
@@ -449,13 +449,20 @@ class MobileNetV2Arch(BaseBackboneArch):
         self.cells = nn.ModuleList(cells)
         return self
 
-    def get_features(self, inputs, p_levels):
+    def get_features(self, inputs, p_levels, rollout=None):
         out = self.stem(inputs)
         level_indexes = feature_level_to_stage_index(self.strides)
         features = []
         for i, cell in enumerate(self.cells):
             for j, block in enumerate(cell):
-                out = block(out)
+                if rollout is None:
+                    out = block(out)
+                else:
+                    if j >= rollout.depth[i]:
+                        break
+                    out = block.forward_rollout(
+                        out, rollout.width[i][j], rollout.kernel[i][j]
+                    )
             features.append(out)
         out = self.conv_head(out)
         features[-1] = out
@@ -624,13 +631,20 @@ class MobileNetV3Arch(BaseBackboneArch):
         self.cells = nn.ModuleList(cells)
         return self
 
-    def get_features(self, inputs, p_levels):
+    def get_features(self, inputs, p_levels, rollout=None):
         out = self.stem(inputs)
         level_indexes = feature_level_to_stage_index(self.strides)
         features = []
         for i, cell in enumerate(self.cells):
             for j, block in enumerate(cell):
-                out = block(out)
+                if rollout is None:
+                    out = block(out)
+                else:
+                    if j >= rollout.depth[i]:
+                        break
+                    out = block.forward_rollout(
+                        out, rollout.width[i][j], rollout.kernel[i][j]
+                    )
             features.append(out)
         out = self.conv_head(out)
         features[-1] = out

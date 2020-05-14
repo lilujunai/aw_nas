@@ -20,19 +20,22 @@ from aw_nas.utils import box_utils
 class FPNObjective(BaseObjective):
     NAME = "fpn_detection"
 
+    SCHEDULABLE_ATTRS = ["soft_loss_coeff"]
+
     def __init__(self, search_space, num_classes=21, 
                  pyramid_levels=[3, 4, 5, 6, 7],
                  crop_size=300,
                  top_k=200,
                  scales=[2 ** 0, 2 ** (1.0 / 3.0), 2 ** (2.0 / 3.0)],
                  ratios=[(1.0, 1.0), (1.4, 0.7), (0.7, 1.4)],
-                 nms_threshold=0.5):
-        super(FPNObjective, self).__init__(search_space)
+                 nms_threshold=0.5, soft_loss_coeff=0., schedule_cfg=None):
+        super(FPNObjective, self).__init__(search_space, schedule_cfg)
         self.num_classes = num_classes
 
         self.anchors = Anchors(pyramid_levels=pyramid_levels, scales=scales, ratios=ratios).forward((crop_size, crop_size))
         self.focal_loss = FocalLoss(self.anchors)
         self.predictor = PredictModel(self.anchors.unsqueeze(0), num_classes, top_k, 0.05, nms_threshold, crop_size)
+        self.soft_loss_coeff = soft_loss_coeff
 
     @classmethod
     def supported_data_types(cls):
@@ -45,7 +48,8 @@ class FPNObjective(BaseObjective):
         """
         Get top-1 acc.
         """
-        return [float(accuracy(outputs, targets)[0]) / 100]
+        confidences, locations = outputs
+        return [float(accuracy(confidences, targets)[0]) / 100]
 
     def get_reward(self, inputs, outputs, targets, cand_net):
         return self.get_perfs(inputs, outputs, targets, cand_net)[0]
@@ -59,7 +63,15 @@ class FPNObjective(BaseObjective):
             outputs: logits
             targets: labels
         """
-        raise NotImplementedError
+        loss = self._criterion(outputs, targets)
+        if self.soft_loss_coeff > 0:
+            with torch.no_grad():
+                outputs_all = cand_net.super_net.forward(inputs).detach()
+            
+            soft = self.loss_soft(outputs, outputs_all)
+            loss2 = loss + soft * self.soft_loss_coeff
+            return loss2
+        return loss
 
     def _criterion(self, outputs, annotations):
         return self.focal_loss(outputs, annotations)
@@ -127,7 +139,7 @@ class FocalLoss(nn.Module):
     def forward(self, predict, annotations):
         alpha = self.alpha
         gamma = self.gamma
-        regressions, classifications = predict
+        classifications, regressions = predict
         device = classifications.device
 
         batch_size = classifications.shape[0]
@@ -150,7 +162,9 @@ class FocalLoss(nn.Module):
 
             boxes, labels = annotations[j]
             labels = labels - 1
-            bbox_annotation = torch.from_numpy(np.concatenate((boxes, labels.reshape(-1, 1)), axis=1)).to(dtype).to(device)
+            boxes = torch.tensor(boxes)
+            labels = torch.tensor(labels.reshape(-1, 1))
+            bbox_annotation = torch.cat([boxes, labels], 1).to(dtype).to(device)
             # bbox_annotation = annotations[j]
             bbox_annotation = bbox_annotation[bbox_annotation[:, 4] != -1]
 
