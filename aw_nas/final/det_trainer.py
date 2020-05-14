@@ -193,13 +193,12 @@ class DetectionFinalTrainer(OFAFinalTrainer): #pylint: disable=too-many-instance
         top5 = utils.AverageMeter()
         model.train()
 
-        results = []
         for step, (ids, inputs, target) in enumerate(train_queue):
             inputs = torch.stack(inputs, 0).to(device)
 
             optimizer.zero_grad()
             confidence, locations = model.forward(inputs)
-            regression_loss, classification_loss, matched_target = criterion((locations, confidence), target)
+            regression_loss, classification_loss, matched_target = criterion((confidence, locations), target)
             loss = regression_loss + classification_loss
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), self.grad_clip)
@@ -235,7 +234,7 @@ class DetectionFinalTrainer(OFAFinalTrainer): #pylint: disable=too-many-instance
             for step, (ids, inputs, target, heights, widths) in enumerate(valid_queue):
                 inputs = torch.stack(inputs, 0).to(device)
                 confidence, locations = model.forward(inputs)
-                regression_loss, classification_loss, matched_target = criterion((locations, confidence), target)
+                regression_loss, classification_loss, matched_target = criterion((confidence, locations), target)
                 keep = (matched_target[1] > 0).reshape(-1)
                 perfs = self._perf_func(inputs, confidence.reshape(-1, confidence.shape[-1])[keep], matched_target[1].reshape(-1)[keep], model)
                 objective_perfs.update(dict(zip(self._perf_names, perfs)))

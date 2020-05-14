@@ -75,6 +75,10 @@ class SSDHeadFinalModel(FinalModel):
         return HeadModel(device, num_classes=num_classes,
                                             extras=extras, regression_headers=regression_headers, classification_headers=classification_headers)
 
+    @classmethod
+    def supported_data_types(cls):
+        return ["image"]
+
 
 class SSDFinalModel(FinalModel):
     NAME = "ssd_final_model"
