@@ -501,6 +501,13 @@ def prepare_data_queues(splits, queue_cfg_lst, data_type="image", drop_last=Fals
     """
     expect(data_type in {"image", "sequence"})
 
+    def collate_fn(batch):
+        from torch.utils.data._utils.collate import default_collate
+        elem = batch[0]
+        if isinstance(elem, tuple):
+            return [[e[i] for e in batch] for i in range(len(elem))]
+        return default_collate(batch)
+
     dset_splits = splits
     dset_sizes = {n: len(d) for n, d in six.iteritems(dset_splits)}
     dset_indices = {n: list(range(size)) for n, size in dset_sizes.items()}
@@ -529,7 +536,8 @@ def prepare_data_queues(splits, queue_cfg_lst, data_type="image", drop_last=Fals
                 "sampler": torch.utils.data.SubsetRandomSampler(
                     indices[int(size*used_portion):int(size*(used_portion+portion))]),
                 "drop_last": drop_last,
-                "timeout": 10
+                "timeout": 10,
+                "collate_fn": collate_fn,
             }
             queue = get_inf_iterator(torch.utils.data.DataLoader(
                 dset_splits[split], **kwargs), callback)
@@ -545,7 +553,8 @@ def prepare_data_queues(splits, queue_cfg_lst, data_type="image", drop_last=Fals
                 "batch_size": bptt_steps,
                 "pin_memory": False,
                 "num_workers": 0,
-                "shuffle": False
+                "shuffle": False,
+                "collate_fn": collate_fn
             }
             queue = get_inf_iterator(torch.utils.data.DataLoader(
                 dataset, **kwargs), callback)
@@ -651,8 +660,16 @@ def get_numpy(arr):
 def count_parameters(model):
     return sum(p.nelement() for name, p in model.named_parameters() if "auxiliary" not in name)
 
+def _to_device(data, device):
+    if isinstance(data, torch.Tensor):
+        return data.to(device)
+    elif isinstance(data, (tuple, list)):
+        return [_to_device(d, device) for d in data]
+    else:
+        return torch.tensor(data).to(device)
+
 def to_device(datas, device):
-    return [data.to(device) for data in datas]
+    return [_to_device(data, device) for data in datas]
 
 def weights_init(m):
     if isinstance(m, torch.nn.Conv2d):
