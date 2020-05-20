@@ -251,6 +251,7 @@ class MepaEvaluator(BaseEvaluator): #pylint: disable=too-many-instance-attribute
             rollout_batch_size=1,
             # only for rnn data
             bptt_steps=35,
+            multiprocess=False,
             schedule_cfg=None):
         super(MepaEvaluator, self).__init__(dataset, weights_manager,
                                             objective, rollout_type, schedule_cfg)
@@ -282,6 +283,7 @@ class MepaEvaluator(BaseEvaluator): #pylint: disable=too-many-instance-attribute
 
         self._data_type = self.dataset.data_type()
         self._device = self.weights_manager.device
+        self.multiprocess = multiprocess
 
         # configs
         self.batch_size = batch_size
@@ -1097,7 +1099,8 @@ class MepaEvaluator(BaseEvaluator): #pylint: disable=too-many-instance-attribute
                                         data_type=self._data_type,
                                         drop_last=self.rollout_batch_size > 1,
                                         shuffle=self.shuffle_data_before_split,
-                                        num_workers=self.workers_per_queue)
+                                        num_workers=self.workers_per_queue,
+                                        multiprocess=self.multiprocess)
         if mepa_as_surrogate:
             # use mepa data queue as surrogate data queue
             self.surrogate_queue = self.mepa_queue

@@ -1,5 +1,6 @@
 import math
 from contextlib import contextmanager
+from functools import reduce
 
 import six
 import numpy as np
@@ -12,6 +13,7 @@ from torch.optim.lr_scheduler import _LRScheduler
 
 from aw_nas.utils.exception import expect
 from aw_nas.utils.lr_scheduler import get_scheduler_cls
+from torch.utils.data.distributed import DistributedSampler
 
 
 ## --- model/training utils ---
@@ -492,7 +494,7 @@ def get_inf_iterator(iterable, callback):
     return InfIterator(iterable, [callback])
 
 def prepare_data_queues(splits, queue_cfg_lst, data_type="image", drop_last=False,
-                        shuffle=True, num_workers=2):
+                        shuffle=True, num_workers=2, multiprocess=False):
     """
     Further partition the dataset splits, prepare different data queues.
 
@@ -500,13 +502,6 @@ def prepare_data_queues(splits, queue_cfg_lst, data_type="image", drop_last=Fals
     @TODO: doc
     """
     expect(data_type in {"image", "sequence"})
-
-    def collate_fn(batch):
-        from torch.utils.data._utils.collate import default_collate
-        elem = batch[0]
-        if isinstance(elem, tuple):
-            return [[e[i] for e in batch] for i in range(len(elem))]
-        return default_collate(batch)
 
     dset_splits = splits
     dset_sizes = {n: len(d) for n, d in six.iteritems(dset_splits)}
@@ -528,17 +523,19 @@ def prepare_data_queues(splits, queue_cfg_lst, data_type="image", drop_last=Fals
         used_portion = used_portions[split]
         indices = dset_indices[split]
         size = dset_sizes[split]
+        d_kwargs = getattr(dset_splits[split], 'kwargs', {})
+        subset_indices = indices[int(size*used_portion):int(size*(used_portion+portion))]
         if data_type == "image":
             kwargs = {
                 "batch_size": batch_size,
                 "pin_memory": True,
                 "num_workers": num_workers,
-                "sampler": torch.utils.data.SubsetRandomSampler(
-                    indices[int(size*used_portion):int(size*(used_portion+portion))]),
+                "sampler": torch.utils.data.SubsetRandomSampler(subset_indices) \
+                        if not multiprocess else CustomDistributedSampler(split, subset_indices),
                 "drop_last": drop_last,
                 "timeout": 10,
-                "collate_fn": collate_fn,
             }
+            kwargs.update(d_kwargs)
             queue = get_inf_iterator(torch.utils.data.DataLoader(
                 dset_splits[split], **kwargs), callback)
         else: # data_type == "sequence"
@@ -553,9 +550,9 @@ def prepare_data_queues(splits, queue_cfg_lst, data_type="image", drop_last=Fals
                 "batch_size": bptt_steps,
                 "pin_memory": False,
                 "num_workers": 0,
-                "shuffle": False,
-                "collate_fn": collate_fn
+                "shuffle": False
             }
+            kwargs.update(d_kwargs)
             queue = get_inf_iterator(torch.utils.data.DataLoader(
                 dataset, **kwargs), callback)
 
@@ -680,3 +677,42 @@ def weights_init(m):
         m.weight.data.normal_(0, 0.01)
         if m.bias is not None:
             m.bias.data.zero_()
+
+def unique(tensor, return_indices=False):
+    assert len(tensor.shape) == 1, "Only one dim arrary implemented."
+    idx = []
+    prev = -float("inf")
+    for i, t in enumerate(tensor):
+        if t == prev:
+            continue
+        prev = t
+        idx.append(i)
+    uniqued = tensor[idx]
+    if return_indices:
+        return uniqued, idx
+    return uniqued
+
+
+class CustomDistributedSampler(DistributedSampler):
+    def __init__(self, dataset, indices, *args, **kwargvs):
+        super(CustomDistributedSampler, self).__init__(dataset, *args, **kwargvs)
+        self.indices = indices
+        self.num_samples = int(math.ceil(len(self.indices) * 1.0 / self.num_replicas))
+        self.total_size = self.num_samples * self.num_replicas
+
+    def __iter__(self):
+        # deterministically shuffle based on epoch
+        g = torch.Generator()
+        g.manual_seed(self.epoch)
+        indices = [self.indices[i] for i in torch.randperm(len(self.indices), generator=g)]
+
+        # add extra samples to make it evenly divisible
+        indices += indices[:(self.total_size - len(indices))]
+        assert len(indices) == self.total_size
+
+        # subsample
+        offset = self.num_samples * self.rank
+        indices = indices[offset:offset + self.num_samples]
+        assert len(indices) == self.num_samples
+
+        return iter(indices)

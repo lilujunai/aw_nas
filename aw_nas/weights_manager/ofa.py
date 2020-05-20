@@ -105,8 +105,6 @@ class OFASupernet(BaseWeightsManager, nn.Module):
     def supported_data_types(cls):
         return ["image"]
 
-    def state_dict(self):
-        return self.backbone.state_dict()
 
     def save(self, path):
         torch.save(
