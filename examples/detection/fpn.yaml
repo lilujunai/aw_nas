@@ -99,7 +99,7 @@ objective_cfg:
   ratios: [[1.0, 1.0], [1.4, 0.7], [0.7, 1.4]]
   crop_size: 512
   top_k: 200
-  confidence_thresh: 0.2
+  confidence_thresh: 0.05
 
 ## ---- Component trainer ----
 # ---- Type simple ----
@@ -144,7 +144,7 @@ final_model_cfg:
 
 final_trainer_type: det_final_trainer
 final_trainer_cfg:
-  batch_size: 32
+  batch_size: 10
   epochs: 300
   optimizer_scheduler:
     eta_min: 0.01

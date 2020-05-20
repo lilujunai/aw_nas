@@ -28,8 +28,8 @@ dataset_cfg:
   load_train_only: false
   random_choose: false
   random_seed: 123
-  train_crop_size: 300
-  test_crop_size: 300
+  train_crop_size: 512
+  test_crop_size: 512
   # image_mean: [103.94, 116.78, 123.68]
   # image_std: [1, 1, 1]
   image_mean: [0.406, 0.456, 0.485]
@@ -56,12 +56,12 @@ evaluator_cfg:
   load_optimizer: false
   load_scheduler: false
   rollout_type: ofa
-  batch_size: 16
+  batch_size: 10
   controller_surrogate_steps: 0
   # derive_surrogate_steps: 0
   mepa_surrogate_steps: 0
   mepa_optimizer:
-    lr: 0.001
+    lr: 0.0001
     momentum: 0.97
     type: SGD
     weight_decay: 0.0001
@@ -74,11 +74,13 @@ evaluator_cfg:
   mepa_samples: 1
   data_portion:
   - 0.0
-  - 0.8 # train evaluator weights
-  - 0.2 # for train controller
+  - 0.99 # train evaluator weights
+  - 0.01 # for train controller
   mepa_as_surrogate: false
   bptt_steps: 35
   schedule_cfg: null
+  workers_per_queue: 8
+  multiprocess: true
 # ---- End Type mepa ----
 ## ---- End Component evaluator ----
 
@@ -100,14 +102,18 @@ weights_manager_cfg:
       kernel_sizes: [3, 5, 7]
       num_classes: 90
       block_type: mbv3_block
+      pretrained_path: /home/tangchangcheng/scripts/ofa_supernet_1.0.pt
+
   head_type: efficientdet_head_final_model
   head_cfg:
     channels: 88
-    attention: True
+    attention: true
     repeat: 4
     num_layers: 3
+    # feature_channels: [40, 112, 320]
+    pretrained_path: /home/tangchangcheng/scripts/efficient_head_d1_lack.pth
   num_classes: 90
-  multiprocess: false
+  multiprocess: true
   
 # ---- End Type supernet ----
 ## ---- End Component weights_manager ----
@@ -120,7 +126,7 @@ objective_cfg:
   pyramid_levels: [3, 4, 5, 6, 7]
   scales: [0, 1, 2]
   ratios: [[1.0, 1.0], [1.4, 0.7], [0.7, 1.4]]
-  crop_size: 300
+  crop_size: 512
   top_k: 200
 #   latency_file: latency_block.txt
 
@@ -131,10 +137,10 @@ trainer_cfg:
   # Schedulable attributes: controller_samples, derive_samples
   rollout_type: ofa
   epochs: 500
-  test_every: 10
+  test_every: 50
   controller_scheduler: null
   controller_samples: 1
-  derive_samples: 8
+  derive_samples: 1
   evaluator_steps: null
   controller_steps: 0
   controller_train_every: 1
