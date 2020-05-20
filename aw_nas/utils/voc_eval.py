@@ -34,8 +34,8 @@ def write_voc_results_file(write_dir, all_boxes, dataset):
         filename = write_dir + '/' + 'comp4_det_test' + '_{:s}.txt'.format(cls_name)
         with open(filename, 'wt') as f:
             for im_ind, (year, index) in enumerate(dataset.ids):
-                dets = all_boxes[cls_ind][im_ind]
-                if dets == []:
+                dets = all_boxes[cls_ind].get(im_ind, [])
+                if len(dets) == 0:
                     continue
                 # the VOCdevkit expects 1-based indices
                 for k in range(dets.shape[0]):

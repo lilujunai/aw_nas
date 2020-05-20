@@ -1,17 +1,21 @@
 # -*- coding: utf-8 -*-
+
+from math import sqrt
+from itertools import product
+
 import numpy as np
 
 import torch
 import torch.nn.functional as F
 
+
 from torch import nn
 from torch.autograd import Variable
 
-from aw_nas.dataset.prior_model import PriorBox
 from aw_nas.dataset.transform import TargetTransform
 from aw_nas.final.det_model import PredictModel
 from aw_nas.objective.base import BaseObjective
-from aw_nas.utils.torch_utils import accuracy
+from aw_nas.utils.torch_utils import accuracy, unique
 from aw_nas.utils import box_utils
 
 class SSDObjective(BaseObjective):
@@ -30,32 +34,79 @@ class SSDObjective(BaseObjective):
         super(SSDObjective, self).__init__(search_space)
         self.num_classes = num_classes
         
-        self.priors = PriorBox(min_dim, aspect_ratios, feature_maps, scales, steps, (center_variance, size_variance), clip).forward()
-        self.target_transform = TargetTransform(self.priors, 0.5,  (center_variance, size_variance))
+        self.priors = PriorBox(min_dim, aspect_ratios, feature_maps, scales, steps, (center_variance, size_variance), clip)
+        self.target_transform = TargetTransform(0.5,  (center_variance, size_variance))
         self.box_loss = MultiBoxLoss(num_classes, nms_threshold, True, 0, True, 3, 1 - nms_threshold, False)
         self.predictor = PredictModel(num_classes, 0, 200, 0.01, nms_threshold, priors=self.priors)
+
+        self.all_boxes = [{} for _ in range(self.num_classes)]
 
     @classmethod
     def supported_data_types(cls):
         return ["image"]
 
-    def batch_transform(self, annotations, device=None):
-        targets = [self.target_transform(*target) for target in annotations]
-        boxes = torch.stack([t[0] for t in targets]).to(device)
-        labels = torch.stack([t[1] for t in targets]).to(device)
-        return (boxes, labels)
+    def batch_transform(self, inputs, outputs, annotations):
+        """
+        annotations: [-1, 4 + 1 + 1 + 2] boxes + labels + ids + shapes
+        """
+        device = inputs.device
+        img_shape = inputs.shape[-1]
+        batch_size = outputs[0].shape[0]
+        priors = self.priors.forward(img_shape).to(device)
+        num_priors = priors.shape[0]
+        location_t = torch.zeros([batch_size, num_priors, 4])
+        classification_t = torch.zeros([batch_size, num_priors])
+        shapes = torch.zeros([batch_size, 3])
+
+        ids, indices = unique(annotations[:, 5], True)
+        shapes = annotations[indices, -3:]
+        for i, _id in enumerate(ids):
+            anno = annotations[annotations[:, 5] == _id]
+            boxes = anno[:, :4]
+            labels = anno[:, 4]
+            conf_t, loc_t = self.target_transform(boxes, labels, priors)
+            location_t[i] = loc_t
+            classification_t[i] = conf_t
+        return classification_t.long().to(device), location_t.to(device), shapes.to(device)
 
     def perf_names(self):
-        return ["acc"]
+        return ["mAP"]
+
+    def get_acc(self, inputs, outputs, targets, cand_net):
+        conf_t, loc_t, shapes = self.batch_transform(inputs, outputs, targets)
+        """
+        target: [batch_size, anchor_num, 5], boxes + labels
+        """
+        keep = conf_t > 0
+        confidences, regressions = outputs
+        return accuracy(confidences[keep], conf_t[keep], topk=(1, 5))
 
     def get_perfs(self, inputs, outputs, targets, cand_net):
         """
-        Get top-1 acc.
+        Get mAP.
         """
-        return [float(accuracy(outputs, targets)[0]) / 100]
+        confidences, regression = outputs
+        ids, indices = unique(targets[:, 5], True)
+        shapes = targets[indices, -2:].cpu().detach().numpy()
+        heights, widths = shapes[:, 0], shapes[:, 1]
+        detections = self.predictor(confidences, regression, inputs.shape[-1])
+        for batch_id, (_id, h, w) in enumerate(zip(ids.to(torch.long).tolist(), heights, widths)):
+            for j in range(self.num_classes):
+                dets = detections[batch_id][j].cpu().detach().numpy()
+                if len(dets) == 0:
+                    continue
+                boxes = dets[:, :4]
+                boxes[:, 0] *= w
+                boxes[:, 2] *= w
+                boxes[:, 1] *= h
+                boxes[:, 3] *= h
+                scores = dets[:, 4].reshape(-1, 1)
+                cls_dets = np.hstack((boxes, scores)).astype(np.float32, copy=False)
+                self.all_boxes[j][_id] = cls_dets
+        return [0.]
 
     def get_reward(self, inputs, outputs, targets, cand_net):
-        return self.get_perfs(inputs, outputs, targets, cand_net)[0]
+        return self.get_perfs(inputs, outputs, targets, cand_net)
 
     def get_loss(self, inputs, outputs, targets, cand_net,
                  add_controller_regularization=True, add_evaluator_regularization=True):
@@ -66,11 +117,11 @@ class SSDObjective(BaseObjective):
             outputs: logits
             targets: labels
         """
-        raise NotImplementedError
+        return self._criterion(inputs, outputs, targets, cand_net)
 
-    def _criterion(self, outputs, annotations):
-        targets = self.batch_transform(annotations, outputs[0].device)
-        return self.box_loss(outputs, targets) + (targets,)
+    def _criterion(self, inputs, outputs, annotations, model):
+        conf_t, loc_t, shapes = self.batch_transform(inputs, outputs, annotations)
+        return self.box_loss(outputs, (conf_t, loc_t))
 
 
 class MultiBoxLoss(nn.Module):
@@ -124,7 +175,7 @@ class MultiBoxLoss(nn.Module):
                 shape: [batch_size,num_objs,5] (last idx is the label).
         """
         conf_data, loc_data = predictions
-        loc_t, conf_t = targets
+        conf_t, loc_t = targets
         num = loc_data.size(0)
 
         loc_t = Variable(loc_t, requires_grad=False)
@@ -168,4 +219,60 @@ class MultiBoxLoss(nn.Module):
         N = num_pos.data.sum()
         loss_l /= N
         loss_c /= N
-        return loss_l, loss_c
+        return loss_c, loss_l
+
+
+class PriorBox(nn.Module):
+    """Compute priorbox coordinates in center-offset form for each source
+    feature map.
+    """
+    def __init__(self, min_dim=300, aspect_ratios=[[2], [2, 3], [2, 3], [2, 3], [2], [2]],
+                    feature_maps=[19, 10, 5, 3, 2, 1],
+                    scales=[45, 90, 135, 180, 225, 270, 315],
+                    steps=[16, 32, 64, 100, 150, 300],
+                    variance=(0.1, 0.2), clip=True, **kwargs):
+
+        super(PriorBox, self).__init__()
+        self.min_dim = min_dim #[height, width]
+        self.feature_maps = feature_maps #[(height, width), ...]
+        self.aspect_ratios = aspect_ratios
+        self.num_priors = len(aspect_ratios)
+        self.clip = clip
+        self.scales = [s / min_dim for s in scales]
+
+        if steps:
+            self.steps = [step / min_dim for step in steps]
+        else:
+            self.steps = [(1 / f_h, 1 / f_w) for f_h, f_w in feature_maps]
+
+        self.offset = [step * 0.5 for step in self.steps]
+
+        self.priors_boxes = {}
+
+    def forward(self, image_shape):
+        if image_shape in self.priors_boxes:
+            return self.priors_boxes[image_shape]
+
+        mean = []
+        # l = 0
+        for k, f in enumerate(self.feature_maps):
+            for i, j in product(range(f), range(f)):
+                cx = j * self.steps[k] + self.offset[k]
+                cy = i * self.steps[k] + self.offset[k]
+                s_k = self.scales[k]
+                mean += [cx, cy, s_k, s_k]
+
+                s_k_prime = sqrt(s_k * self.scales[k+1])
+                mean += [cx, cy, s_k_prime, s_k_prime]
+                for ar in self.aspect_ratios[k]:
+                    if isinstance(ar, int):
+                        ar_sqrt = sqrt(ar)
+                        mean += [cx, cy, s_k*ar_sqrt, s_k/ar_sqrt]
+                        mean += [cx, cy, s_k/ar_sqrt, s_k*ar_sqrt]
+                    elif isinstance(ar, list):
+                        mean += [cx, cy, s_k*ar[0], s_k*ar[1]]
+        output = torch.Tensor(mean).view(-1, 4)
+        if self.clip:
+            output.clamp_(max=1, min=0)
+        self.priors_boxes[image_shape] = output
+        return output

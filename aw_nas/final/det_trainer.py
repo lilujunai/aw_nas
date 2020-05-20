@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import functools
 import os
 import pickle
 import timeit
@@ -66,12 +67,13 @@ class DetectionFinalTrainer(OFAFinalTrainer): #pylint: disable=too-many-instance
                 add_regularization,
                 save_as_state_dict,
                 workers_per_queue,
-                eval_no_grad,schedule_cfg)
+                eval_no_grad, schedule_cfg)
 
         self.eval_every = eval_every
         self.predictor = self.objective.predictor
         self._criterion = self.objective._criterion
-        self.softmax = nn.Softmax(dim=-1).to(self.device)
+        self._acc_func = self.objective.get_acc
+        self._perf_func = self.objective.get_perfs
 
         if eval_dir is None:
             eval_dir = os.environ['HOME']
@@ -79,31 +81,6 @@ class DetectionFinalTrainer(OFAFinalTrainer): #pylint: disable=too-many-instance
             eval_dir = os.path.join(eval_dir, '.det_exp', str(pid))
             os.makedirs(eval_dir, exist_ok=True)
         self.eval_dir = eval_dir
-
-        _splits = self.dataset.splits()
-
-        def collate_fn(batch):
-            from torch.utils.data._utils.collate import default_collate
-            elem = batch[0]
-            if isinstance(elem, tuple):
-                return [[e[i] for e in batch] for i in range(len(elem))]
-            return default_collate(batch)
-            
-        if self.multiprocess:
-            self.train_queue = torch.utils.data.DataLoader(
-                _splits["train"], batch_size=batch_size, pin_memory=True,
-                num_workers=workers_per_queue,
-                sampler=DistributedSampler(_splits["train"], shuffle=True), collate_fn=collate_fn)
-            self.valid_queue = torch.utils.data.DataLoader(
-                _splits["test"], batch_size=batch_size, pin_memory=True,
-                num_workers=workers_per_queue, shuffle=False, collate_fn=collate_fn)
-        else:
-            self.train_queue = torch.utils.data.DataLoader(
-                _splits["train"], batch_size=batch_size, pin_memory=True,
-                num_workers=workers_per_queue, shuffle=True, collate_fn=collate_fn)
-            self.valid_queue = torch.utils.data.DataLoader(
-                _splits["test"], batch_size=batch_size, pin_memory=True,
-                num_workers=workers_per_queue, shuffle=False, collate_fn=collate_fn)
 
     def _init_optimizer(self):
         optim_cls = getattr(torch.optim, self.optimizer_type)
@@ -193,18 +170,19 @@ class DetectionFinalTrainer(OFAFinalTrainer): #pylint: disable=too-many-instance
         top5 = utils.AverageMeter()
         model.train()
 
-        for step, (ids, inputs, target) in enumerate(train_queue):
-            inputs = torch.stack(inputs, 0).to(device)
+        for step, (inputs, targets) in enumerate(train_queue):
+            inputs = inputs.to(self.device)
+            targets = targets.to(self.device)
 
             optimizer.zero_grad()
-            confidence, locations = model.forward(inputs)
-            regression_loss, classification_loss, matched_target = criterion((confidence, locations), target)
-            loss = regression_loss + classification_loss
+            predictions = model.forward(inputs)
+            classification_loss, regression_loss = criterion(inputs, predictions, targets, model)
+            loss = classification_loss + regression_loss
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), self.grad_clip)
             optimizer.step()
-            keep = (matched_target[1] > 0).reshape(-1)
-            prec1, prec5 = utils.accuracy(confidence.reshape(-1, confidence.shape[-1])[keep], matched_target[1].reshape(-1)[keep], topk=(1, 5))
+
+            prec1, prec5 = self._acc_func(inputs, predictions, targets, model)
 
             n = inputs.size(0)
             cls_objs.update(classification_loss.item(), n)
@@ -217,7 +195,6 @@ class DetectionFinalTrainer(OFAFinalTrainer): #pylint: disable=too-many-instance
                                  step, cls_objs.avg, loc_objs.avg, top1.avg, top5.avg)
         return top1.avg, cls_objs.avg + loc_objs.avg
 
-
     def infer_epoch(self, valid_queue, model, criterion, device):
         expect(self._is_setup, "trainer.setup should be called first")
         cls_objs = utils.AverageMeter()
@@ -229,51 +206,26 @@ class DetectionFinalTrainer(OFAFinalTrainer): #pylint: disable=too-many-instance
 
         context = torch.no_grad if self.eval_no_grad else nullcontext
         with context():
-            num_images = len(valid_queue) * valid_queue.batch_size
-            all_boxes = [[[] for _ in range(num_images)] for _ in range(self.model.num_classes+1)]
-            for step, (ids, inputs, target, heights, widths) in enumerate(valid_queue):
-                inputs = torch.stack(inputs, 0).to(device)
-                confidence, locations = model.forward(inputs)
-                regression_loss, classification_loss, matched_target = criterion((confidence, locations), target)
-                keep = (matched_target[1] > 0).reshape(-1)
-                perfs = self._perf_func(inputs, confidence.reshape(-1, confidence.shape[-1])[keep], matched_target[1].reshape(-1)[keep], model)
+            for step, (inputs, targets) in enumerate(valid_queue):
+                inputs = inputs.to(device)
+                targets = targets.to(device)
+
+                predictions = model.forward(inputs)
+                classification_loss, regression_loss = criterion(inputs, predictions, targets, model)
+
+                prec1, prec5 = self._acc_func(inputs, predictions, targets, model)
+                
+                perfs = self._perf_func(inputs, predictions, targets, model)
                 objective_perfs.update(dict(zip(self._perf_names, perfs)))
-                prec1, prec5 = utils.accuracy(confidence.reshape(-1, confidence.shape[-1])[keep], matched_target[1].reshape(-1)[keep], topk=(1, 5))
                 n = inputs.size(0)
                 cls_objs.update(classification_loss.item(), n)
                 loc_objs.update(regression_loss.item(), n)
                 top1.update(prec1.item(), n)
                 top5.update(prec5.item(), n)
 
-                detections = self.predictor(confidence, locations).data
-                for batch_id, (_id, h, w) in enumerate(zip(ids, heights, widths)):
-                    for j in range(1, detections.size(1)):
-                        dets = detections[batch_id, j, :]
-                        mask = dets[:, 0].gt(0.).expand(5, dets.size(0)).t()
-                        dets = torch.masked_select(dets, mask).view(-1, 5)
-                        if dets.size(0) == 0:
-                            continue
-                        boxes = dets[:, 1:]
-                        boxes[:, 0] *= w
-                        boxes[:, 2] *= w
-                        boxes[:, 1] *= h
-                        boxes[:, 3] *= h
-                        scores = dets[:, 0].cpu().numpy()
-                        cls_dets = np.hstack((boxes.cpu().numpy(),
-                                                scores[:, np.newaxis])).astype(np.float32,
-                                                                                copy=False)
-                        all_boxes[j][_id] = cls_dets
-
                 if step % self.report_every == 0:
-                    self.logger.info("valid %03d %e %e %f %f %s", step, cls_objs.avg, loc_objs.avg, top1.avg, top5.avg,
+                    self.logger.info("valid %03d %e %e;  %.2f%%; %.2f%%; %s", step, cls_objs.avg, loc_objs.avg, top1.avg, top5.avg,
                                      "; ".join(["{}: {:.3f}".format(perf_n, v) \
                                                 for perf_n, v in objective_perfs.avgs().items()]))
-            with open(self.eval_dir + '/all_boxes.pkl', 'wb') as f:
-                pickle.dump(all_boxes, f, pickle.HIGHEST_PROTOCOL)
-            t0 = timeit.default_timer()
-            out_dir = os.path.join(self.eval_dir, str(self.epoch))
-            os.makedirs(out_dir, exist_ok=True)
-            mAP = self.dataset.evaluate_detections(all_boxes, out_dir)
-            self.logger.info('eval elapse: {}'.format(timeit.default_timer() - t0))
-            self.logger.info("valid mAP: {}".format(mAP))
+        self.dataset.evaluate_detections(self.objective.all_boxes, self.eval_dir)
         return top1.avg, cls_objs.avg + loc_objs.avg, objective_perfs.avgs()

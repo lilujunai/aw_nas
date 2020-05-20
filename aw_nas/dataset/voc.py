@@ -14,7 +14,6 @@ from aw_nas.utils.box_utils import *
 from aw_nas.utils.voc_eval import write_voc_results_file, do_python_eval
 
 from aw_nas.dataset.base import BaseDataset
-from aw_nas.dataset.prior_model import PriorBox
 from aw_nas.dataset.transform import *
 
 CLASSES = (
@@ -70,11 +69,26 @@ class VOCDataset(object):
 
         self.class_dict = {class_name: i for i, class_name in enumerate(self.class_names)}
 
+        def collate_fn(batch):
+            inputs = [b[0] for b in batch]
+            targets = [b[1] for b in batch]
+            inputs = torch.stack(inputs, 0)
+            return inputs, targets
+
+        self.kwargs = {"collate_fn": collate_fn}
+
     def __getitem__(self, index):
-        image, target, height, width = self._getitem(index)
-        if self.is_test:
-            return index, image, target, height, width
-        return index, image, target
+        image, boxes, labels, height, width = self._getitem(index)
+        labels = torch.from_numpy(labels).to(torch.long)
+        boxes = torch.from_numpy(boxes).to(torch.float)
+        # idxs = torch.ones_like(labels) * index
+        # height = torch.ones_like(labels) * height
+        # width = torch.ones_like(labels) * width
+        # anno = torch.tensor([index, height, width])
+        # targets = torch.cat([boxes, labels.to(torch.float), idxs.to(torch.float), height.to(torch.float), width.to(torch.float)], dim=1)
+        # return image, targets
+        return image, (boxes, labels, index, height, width)
+        
 
     def _getitem(self, index):
         img_id, (boxes, labels, is_difficult) = self.get_annotation(index)
@@ -86,8 +100,7 @@ class VOCDataset(object):
 
         if self.target_transform is not None:
             (boxes, labels) = self.target_transform(boxes, labels)
-        target = (boxes, labels)
-        return torch.tensor(image), target, height, width
+        return image, boxes, labels, height, width
 
     def get_image(self, index):
         image_id = self.ids[index]

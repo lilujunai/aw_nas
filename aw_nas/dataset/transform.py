@@ -34,18 +34,17 @@ class TestTransform:
 
 
 class TargetTransform(object):
-    def __init__(self, priors, iou_threshold, variance):
-        self.priors = priors
+    def __init__(self, iou_threshold, variance):
         self.threshold = iou_threshold
         self.variance = variance
 
-    def __call__(self, boxes, labels):
+    def __call__(self, boxes, labels, priors):
 
-        num_priors = self.priors.size(0)
+        num_priors = priors.size(0)
         loc_t = torch.Tensor(1, num_priors, 4)
         conf_t = torch.LongTensor(1, num_priors)
-        match(self.threshold, torch.tensor(boxes).float(), self.priors, self.variance, torch.tensor(labels),
+        match(self.threshold, torch.tensor(boxes).float(), priors, self.variance, torch.tensor(labels),
                 loc_t, conf_t, 0)
         loc_t = loc_t.squeeze(0)
         conf_t = conf_t.squeeze(0)
-        return loc_t, conf_t
+        return conf_t, loc_t

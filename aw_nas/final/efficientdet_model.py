@@ -147,6 +147,7 @@ class EfficientDetHeadFinalModel(FinalModel):
                  attention,
                  repeat,
                  num_layers,
+                 pretrained_path=None,
                  schedule_cfg=None):
         extras, regression_headers, classification_headers = generate_headers_bifpn(num_classes, feature_channels, channels, attention, repeat, num_layers, device=device)
         self.device = device
@@ -156,8 +157,11 @@ class EfficientDetHeadFinalModel(FinalModel):
         self.regression_headers = regression_headers
         self.classification_headers = classification_headers
         expect(None not in [extras, regression_headers, classification_headers], 'Extras, regression_headers and classification_headers must be provided, got None instead.', ConfigException)
-        return EfficientDetHeadModel(device, num_classes=num_classes,
+        head = EfficientDetHeadModel(device, num_classes=num_classes,
                                             extras=extras, regression_headers=regression_headers, classification_headers=classification_headers)
+        if pretrained_path:
+            head.load_state_dict(torch.load(pretrained_path, "cpu"), strict=False)
+        return head
 
     @classmethod
     def supported_data_types(cls):
@@ -192,7 +196,8 @@ class EfficientDetFinalModel(FinalModel):
             self._load_base_net(backbone_state_dict_path)
 
         # 这里要给出所有的backbone中需要做BiFPN的特征维数，按照[p3, p4, p5]的顺序给出
-        backbone_stage_channel = self.final_model.get_feature_channel_num(feature_levels)
+        # backbone_stage_channel = self.final_model.get_feature_channel_num(feature_levels)
+        backbone_stage_channel = [40, 112, 320]
         self.head = EfficientDetHeadFinalModel(device, num_classes, backbone_stage_channel, **head_cfg)
 
 
@@ -206,6 +211,15 @@ class EfficientDetFinalModel(FinalModel):
         self.total_flops = 0
         self._flops_calculated = False
         self.set_hook()
+
+        import sys
+        sys.path.append("/home/tangchangcheng/projects/Yet-Another-EfficientDet-Pytorch")
+        self.efficient_det = torch.load("/home/tangchangcheng/projects/Yet-Another-EfficientDet-Pytorch/entire_model.pth").to(device)
+
+        self.head.extras.load_state_dict(self.efficient_det.bifpn.state_dict())
+        
+        self.head.regression_headers.load_state_dict(self.efficient_det.regressor.state_dict())
+        self.head.classification_headers.load_state_dict(self.efficient_det.classifier.state_dict())
 
 
     def _load_base_net(self, backbone_state_dict_path):
@@ -243,10 +257,16 @@ class EfficientDetFinalModel(FinalModel):
 
     def forward(self, inputs): #pylint: disable=arguments-differ
         # 这一句话就可以表示中间层的feature？？我默认了
-        features, _ = self.final_model.get_features(inputs, self.feature_levels)
+        # features, _ = self.final_model.get_features(inputs, self.feature_levels)
         
-        # 这里的输入是(p3, p4, p5)的feature map
-        confidences, locations = self.head(features)
-        confidences = confidences.sigmoid()
+        # # 这里的输入是(p3, p4, p5)的feature map
+        # confidences, locations = self.head(features)
+        # confidences = confidences.sigmoid()
+        # return confidences, locations
 
-        return confidences, locations
+        # features, _, regression, classification, anchors = self.efficient_det(inputs)
+        features = self.efficient_det.backbone_net(inputs)
+        classification, regression = self.head(features[1:])
+        classification = classification.sigmoid()
+        
+        return classification, regression

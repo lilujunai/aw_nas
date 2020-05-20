@@ -294,6 +294,7 @@ class BaseBackboneArch(Component, nn.Module):
         do_kernel_transform=True,
         num_classes=10,
         cell_type="mbv2_cell",
+        pretrained_path=None,
         schedule_cfg=None,
     ):
         super(BaseBackboneArch, self).__init__(schedule_cfg)
@@ -308,6 +309,8 @@ class BaseBackboneArch(Component, nn.Module):
         self.kernel_sizes = kernel_sizes
         self.do_kernel_transform = do_kernel_transform
         self.num_classes = num_classes
+
+        self.pretrained_path = pretrained_path
 
     @abc.abstractmethod
     def make_stage(
@@ -333,6 +336,7 @@ class MobileNetV2Arch(BaseBackboneArch):
         do_kernel_transform=True,
         num_classes=10,
         block_type="mbv2_block",
+        pretrained_path=None,
         schedule_cfg=None,
     ):
         super(MobileNetV2Arch, self).__init__(
@@ -345,6 +349,7 @@ class MobileNetV2Arch(BaseBackboneArch):
             kernel_sizes,
             do_kernel_transform,
             num_classes,
+            pretrained_path,
             schedule_cfg,
         )
         self.block_initializer = FlexibleBlock.get_class_(block_type)
@@ -391,6 +396,10 @@ class MobileNetV2Arch(BaseBackboneArch):
             nn.BatchNorm2d(self.channels[-1]),
         )
         self.classifier = nn.Conv2d(self.channels[-1], num_classes, 1, 1, 0)
+
+        if self.pretrained_path:
+            state_dict = torch.load(self.pretrained_path, "cpu")
+            self.logger.info(self.load_state_dict(state_dict, strict=False))
 
         self.to(self.device)
 
@@ -490,6 +499,7 @@ class MobileNetV3Arch(BaseBackboneArch):
         acts=["relu", "relu", "relu", "h_swish", "h_swish", "h_swish"],
         num_classes=10,
         block_type="mbv3_block",
+        pretrained_path=None,
         schedule_cfg=None,
     ):
         super(MobileNetV3Arch, self).__init__(
@@ -502,6 +512,7 @@ class MobileNetV3Arch(BaseBackboneArch):
             kernel_sizes,
             do_kernel_transform,
             num_classes,
+            pretrained_path,
             schedule_cfg,
         )
         self.block_initializer = FlexibleBlock.get_class_(block_type)
@@ -560,6 +571,10 @@ class MobileNetV3Arch(BaseBackboneArch):
             get_op("h_swish")(inplace=True),
         )
         self.classifier = nn.Linear(self.channels[-1], num_classes)
+
+        if self.pretrained_path:
+            state_dict = torch.load(self.pretrained_path, "cpu")
+            self.logger.info(self.load_state_dict(state_dict, strict=False))
 
         self.to(self.device)
 

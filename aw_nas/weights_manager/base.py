@@ -12,6 +12,8 @@ from aw_nas import Component, utils
 from aw_nas.utils.common_utils import nullcontext
 from aw_nas.utils.exception import expect, ConfigException
 
+import timeit
+
 class BaseWeightsManager(Component):
     REGISTRY = "weights_manager"
 
@@ -135,6 +137,8 @@ class CandidateNet(nn.Module):
         """
         self._set_mode(mode)
 
+        # t0 = timeit.default_timer()
+
         if return_grads:
             active_parameters = dict(self.named_parameters())
             if parameters is not None:
@@ -162,6 +166,7 @@ class CandidateNet(nn.Module):
         if eval_criterions:
             eval_res = utils.flatten_list([c(data[0], outputs, targets) for c in eval_criterions])
             return grads, eval_res
+        # print("\nelapse gradient: ", timeit.default_timer() - t0)
         return grads
 
     def train_queue(self, queue, optimizer, criterion=lambda i, l, t: nn.CrossEntropyLoss()(l, t),

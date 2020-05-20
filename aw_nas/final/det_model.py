@@ -99,11 +99,11 @@ class PredictModel(nn.Module):
         self.priors = priors
         self.softmax = torch.nn.Softmax(dim=-1)
 
-    def forward(self, confidences, locations):
-        priors = self.priors.to(confidences.device)
+    def forward(self, confidences, locations, img_shape):
+        priors = self.priors(img_shape).to(confidences.device)
         num = confidences.size(0)  # batch size
         num_priors = priors.size(0)
-        output = torch.zeros(num, self.num_classes, self.top_k, 5)
+        output = [[torch.tensor([]) for _ in range(self.num_classes)] for _ in range(num)]
         confidences = self.softmax(confidences)
         conf_preds = confidences.view(num, num_priors,
                                       self.num_classes).transpose(2, 1)
@@ -121,16 +121,12 @@ class PredictModel(nn.Module):
                 l_mask = c_mask.unsqueeze(1).expand_as(decoded_boxes)
                 boxes = decoded_boxes[l_mask].view(-1, 4)
                 # idx of highest scoring and non-overlapping boxes per class
-                # ids, count = nms(boxes, scores, self.nms_thresh, self.top_k)
                 box_prob = torch.cat([boxes, scores.view(-1, 1)], 1)
                 ids = nms(box_prob.cpu().detach().numpy(),
                           self.nms_thresh, self.top_k)
-                output[i, cls_idx, :len(ids)] = \
-                    torch.cat((scores[ids].unsqueeze(1),
-                               boxes[ids]), 1)
-        flt = output.contiguous().view(num, -1, 5)
-        _, idx = flt[:, :, 0].sort(1, descending=True)
-        _, rank = idx.sort(1)
-        flt[(rank < self.top_k).unsqueeze(-1).expand_as(flt)].fill_(0)
+                output[i][cls_idx] = torch.cat((boxes[ids], scores[ids].unsqueeze(1)), 1)
+                # output[i, cls_idx, :len(ids)] = \
+                #     torch.cat((scores[ids].unsqueeze(1),
+                #                boxes[ids]), 1)
         return output
 

@@ -84,21 +84,23 @@ class OFAFinalTrainer(FinalTrainer): #pylint: disable=too-many-instance-attribut
 
         _splits = self.dataset.splits()
 
+        train_kwargs = getattr(_splits["train"], "kwargs", {})
+        test_kwagrs = getattr(_splits["test"], "kwargs", {})
         if self.multiprocess:
             self.train_queue = torch.utils.data.DataLoader(
                 _splits["train"], batch_size=batch_size, pin_memory=True,
                 num_workers=workers_per_queue,
-                sampler=DistributedSampler(_splits["train"], shuffle=True))
+                sampler=DistributedSampler(_splits["train"], shuffle=True), **train_kwargs)
             self.valid_queue = torch.utils.data.DataLoader(
                 _splits["test"], batch_size=batch_size, pin_memory=True,
-                num_workers=workers_per_queue, shuffle=False)
+                num_workers=workers_per_queue, shuffle=False, **train_kwargs)
         else:
             self.train_queue = torch.utils.data.DataLoader(
                 _splits["train"], batch_size=batch_size, pin_memory=True,
-                num_workers=workers_per_queue, shuffle=True)
+                num_workers=workers_per_queue, shuffle=True, **train_kwargs)
             self.valid_queue = torch.utils.data.DataLoader(
                 _splits["test"], batch_size=batch_size, pin_memory=True,
-                num_workers=workers_per_queue, shuffle=False)
+                num_workers=workers_per_queue, shuffle=False, **train_kwargs)
 
         if self.model is not None:
             self.optimizer = self._init_optimizer()
@@ -162,7 +164,6 @@ class OFAFinalTrainer(FinalTrainer): #pylint: disable=too-many-instance-attribut
         else:
             res = self.model.load_state_dict(torch.load(
                 m_path, map_location=torch.device("cpu")), strict=False)
-            s
 
         self.model.to(self.device)
         self._parallelize()

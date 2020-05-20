@@ -11,7 +11,7 @@ from aw_nas.common import assert_rollout_type
 from aw_nas.final.base import FinalModel
 from aw_nas.ops import *
 from aw_nas.utils import data_parallel
-from aw_nas.utils.common_utils import make_divisible
+from aw_nas.utils.common_utils import make_divisible, nullcontext
 from aw_nas.utils.exception import expect, ConfigException
 from aw_nas.utils import DistributedDataParallel
 from aw_nas.weights_manager.base import BaseWeightsManager, CandidateNet
@@ -50,7 +50,7 @@ class DetectionBackboneSupernet(BaseWeightsManager, nn.Module):
         nn.Module.__init__(self)
         self.backbone = BaseWeightsManager.get_class_(search_backbone_type)(
             search_space, device, rollout_type, 
-            num_classes=num_classes, 
+            num_classes=1000, 
             multiprocess=False, 
             gpus=gpus, 
             **search_backbone_cfg
@@ -60,10 +60,18 @@ class DetectionBackboneSupernet(BaseWeightsManager, nn.Module):
         # TODO: update SSDHeadModel in ssd_model to be able to accept yaml config
         self.feature_levels = feature_levels
         backbone_stage_channel = self.backbone.backbone.get_feature_channel_num(feature_levels)
+        cfg_channels = head_cfg.get("feature_channels", backbone_stage_channel)
+        self.glue_conv = nn.ModuleList()
+        for c1, c2 in zip(backbone_stage_channel, cfg_channels):
+            if c1 != c2:
+                self.glue_conv.append(nn.Conv2d(c1, c2, 1))
+            else:
+                self.glue_conv.append(nn.Identity())
+
         self.head = FinalModel.get_class_(head_type)(
             device,
             num_classes,
-            backbone_stage_channel,
+            cfg_channels,
             **head_cfg
         )
 
@@ -78,6 +86,7 @@ class DetectionBackboneSupernet(BaseWeightsManager, nn.Module):
     
     def forward(self, inputs, rollout=None):
         features, out = self.backbone.get_features(inputs, self.feature_levels, rollout)
+        features = [conv(f) for f, conv in zip(features, self.glue_conv)]
         return self.head(features)
 
     # ---- APIs ----
@@ -150,54 +159,13 @@ class DetectionBackboneCandidateNet(CandidateNet):
             )
         return out
 
-    def gradient(self, data, criterion,
-                parameters=None, eval_criterions=None, mode="train",
-                zero_grads=True, return_grads=True, **kwargs):
-        """Get the gradient with respect to the candidate net parameters.
-
-        Args:
-            parameters (optional): if specificied, can be a dict of param_name: param,
-            or a list of parameter name.
-        Returns:
-            grads (dict of name: grad tensor)
-        """
-        self._set_mode(mode)
-
-        if return_grads:
-            active_parameters = dict(self.named_parameters())
-            if parameters is not None:
-                _parameters = dict(parameters)
-                _addi = set(_parameters.keys()).difference(active_parameters)
-                assert not _addi,\
-                    ("Cannot get gradient of parameters that are not active "
-                     "in this candidate net: {}")\
-                        .format(", ".join(_addi))
-            else:
-                _parameters = active_parameters
-        
-        ids, inputs, targets = data
-        inputs = torch.stack(inputs, 0)
-        outputs = confidences, locations = self.forward_data(inputs, targets, **kwargs)
-        loss_r, loss_c, matched_targets = criterion(inputs, (confidences, locations), targets)
-        keep = (matched_targets[1] > 0).reshape(-1)
-        matched_targets = matched_targets[1].reshape(-1)[keep]
-        confidences = confidences.reshape(-1, confidences.shape[-1])[keep]
-        loss = loss_r + loss_c
-        if zero_grads:
-            self.zero_grad()
-        loss.backward()
-
-        if not return_grads:
-            grads = None
-        else:
-            grads = [(k, v.grad.clone()) for k, v in six.iteritems(_parameters)\
-                     if v.grad is not None]
-
+    def gradient(self, data, criterion=lambda i, l, t: nn.CrossEntropyLoss()(l, t),
+                     parameters=None, eval_criterions=None, mode="train",
+                            zero_grads=True, return_grads=True, **kwargs):
         if eval_criterions:
-            eval_criterions = [eval_criterions[0]] + eval_criterions[2:]
-            eval_res = utils.flatten_list([c(inputs, (confidences, locations), matched_targets) for c in eval_criterions])
-            return grads, eval_res
-        return grads
+            eval_criterions = eval_criterions[1:]
+        return super(DetectionBackboneCandidateNet, self).gradient(data, criterion, parameters, eval_criterions, mode=mode,
+                            zero_grads=zero_grads, return_grads=return_grads, **kwargs)
 
     def eval_queue(self, queue, criterions, steps=1, mode="eval", **kwargs):
         self._set_mode(mode)
@@ -208,15 +176,9 @@ class DetectionBackboneCandidateNet(CandidateNet):
             for _ in range(steps):
                 data = next(queue)
                 # print("{}/{}\r".format(i, steps), end="")
-                ids, inputs, target, heights, widths = data
-                device = self.get_device()
-                inputs = torch.stack(inputs, 0).to(device)
-                confidence, locations = self.forward_data(inputs, **kwargs)
-
-                keep = (matched_targets[1] > 0).reshape(-1)
-                matched_targets = matched_targets.reshape(-1)[keep]
-                confidence = confidence.reshape(-1, outputs.shape[-1])[keep]
-                ans = utils.flatten_list([c(inputs, confidence, matched_targets) for c in criterions])
+                data = (data[0].to(self.get_device()), data[1])
+                outputs = self.forward_data(data[0], **kwargs)
+                ans = utils.flatten_list([c(data[0], outputs, data[1]) for c in criterions])
                 if average_ans is None:
                     average_ans = ans
                 else:
