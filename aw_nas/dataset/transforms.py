@@ -29,7 +29,7 @@ class Resizer(object):
 
         boxes *= scale
         
-        return torch.from_numpy(new_image).to(torch.float32), torch.from_numpy(boxes), torch.from_numpy(labels).to(torch.long)
+        return torch.from_numpy(new_image).to(torch.float32), torch.from_numpy(boxes).to(torch.float32), torch.from_numpy(labels).to(torch.long)
 
 
 class Augmenter(object):
@@ -61,16 +61,34 @@ class Normalizer(object):
         self.std = np.array([[std]])
 
     def __call__(self, image, boxes, labels):
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         return (image.astype(np.float32) - self.mean) / self.std, boxes, labels
 
 
 class TrainTransformer(object):
     def __init__(self, mean, std, crop_size):
-        self.compose = transforms.Compose([
+        self.compose = [
             Normalizer(mean=mean, std=std),
             Augmenter(),
+            Resizer(crop_size)]
+    
+    def __call__(self, img, boxes, labels):
+        for fn in self.compose:
+            img, boxes, labels = fn(img, boxes, labels)
+        img = img.permute(2, 1, 0)
+        return img, boxes, labels
+
+
+class TestTransformer(object):
+    def __init__(self, mean, std, crop_size):
+        self.compose = transforms.Compose([
+            Normalizer(mean=mean, std=std),
+            # Augmenter(),
             Resizer(crop_size)]
         )
     
     def __call__(self, img, boxes, labels):
-        return self.compose(img, boxes, labels)
+        for fn in self.compose:
+            img, boxes, labels = fn(img, boxes, labels)
+        img = img.permute(2, 1, 0)
+        return img, boxes, labels

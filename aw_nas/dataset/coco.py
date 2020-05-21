@@ -12,7 +12,7 @@ import torch.utils.data as data
 import torchvision.transforms as transforms
 
 from aw_nas.dataset.base import BaseDataset
-from aw_nas.dataset.transform import *
+from aw_nas.dataset.transforms import *
 from aw_nas.utils import mask as COCOmask
 from aw_nas.utils.coco import COCO
 from aw_nas.utils.coco_eval import COCOeval
@@ -222,8 +222,6 @@ class COCODetection(data.Dataset):
 
     def __getitem__(self, index):
         image, boxes, labels, height, width = self._getitem(index)
-        labels = torch.from_numpy(labels).to(torch.long)
-        boxes = torch.from_numpy(boxes).to(torch.float)
         # idxs = torch.ones_like(labels) * index
         # height = torch.ones_like(labels) * height
         # width = torch.ones_like(labels) * width
@@ -419,8 +417,11 @@ class COCODataset(BaseDataset):
 
         self.iou_threshold = iou_threshold
 
-        train_transform = TrainAugmentation(train_crop_size, np.array(image_mean), np.array(image_std), normalize, normalize_box)
-        test_transform = TestTransform(test_crop_size, np.array(image_mean), np.array(image_std), normalize, normalize_box)
+        # train_transform = TrainAugmentation(train_crop_size, np.array(image_mean), np.array(image_std), normalize, normalize_box)
+        # test_transform = TestTransform(test_crop_size, np.array(image_mean), np.array(image_std), normalize, normalize_box)
+
+        train_transform = TrainTransformer(image_mean, image_std, train_crop_size)
+        test_transform = TestTransformer(image_mean, image_std, train_crop_size)
 
         self.datasets = {}
         self.datasets["train"] = COCODetection(self.train_data_dir, train_sets, train_transform)
