@@ -32,8 +32,8 @@ dataset_cfg:
   test_crop_size: 512
   # image_mean: [103.94, 116.78, 123.68]
   # image_std: [1, 1, 1]
-  image_mean: [0.406, 0.456, 0.485]
-  image_std: [0.225, 0.224, 0.229]
+  image_mean: [0.485, 0.456, 0.406]
+  image_std: [0.229, 0.224, 0.225]
   normalize: true
   normalize_box: false
 # ---- End Type cifar10 ----
@@ -74,8 +74,9 @@ evaluator_cfg:
   mepa_samples: 1
   data_portion:
   - 0.0
-  - 0.99 # train evaluator weights
-  - 0.01 # for train controller
+  - 0.95 # train evaluator weights
+  - 0.05 # for train controller
+  schedule_every_batch: true
   mepa_as_surrogate: false
   bptt_steps: 35
   schedule_cfg: null
@@ -97,6 +98,7 @@ weights_manager_cfg:
       blocks: [1, 4, 4, 4, 4, 4]
       strides: [1, 2, 2, 2, 1, 2]
       expansions: [1, 6, 6, 6, 6, 6]
+      acts: ["relu", "relu", "relu", "h_swish", "h_swish", "h_swish"]
       channels: [16, 16, 24, 32, 64, 96, 160, 320, 1280]
       mult_ratio: 1.
       kernel_sizes: [3, 5, 7]
@@ -111,7 +113,7 @@ weights_manager_cfg:
     repeat: 4
     num_layers: 3
     # feature_channels: [40, 112, 320]
-    pretrained_path: /home/tangchangcheng/scripts/efficient_head_d1_lack.pth
+    pretrained_path: /home/tangchangcheng/scripts/efficient_head_d1_revised.pth
   num_classes: 90
   multiprocess: true
   
