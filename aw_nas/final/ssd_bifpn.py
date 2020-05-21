@@ -12,6 +12,8 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+from aw_nas.ops import get_op
+
 class SwishImplementation(torch.autograd.Function):
     @staticmethod
     def forward(ctx, i):
@@ -199,7 +201,8 @@ class BiFPN(nn.Module):
         self.p6_downsample = MaxPool2dStaticSamePadding(3, 2)
         self.p7_downsample = MaxPool2dStaticSamePadding(3, 2)
 
-        self.swish = MemoryEfficientSwish() if not onnx_export else Swish()
+        # self.swish = MemoryEfficientSwish() if not onnx_export else Swish()
+        self.swish = get_op("h-swish")(inplace=True)
 
         self.first_time = first_time
         if self.first_time:

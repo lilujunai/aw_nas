@@ -63,8 +63,9 @@ class SeparableConvBlock(nn.Module):
             self.bn = nn.BatchNorm2d(num_features=out_channels, momentum=0.01, eps=1e-3)
 
         self.activation = activation
-        if self.activation:
-            self.swish = MemoryEfficientSwish() if not onnx_export else Swish()
+        assert activation == False
+        # if self.activation:
+        #     self.swish = MemoryEfficientSwish() if not onnx_export else Swish()
 
     def forward(self, x):
         x = self.depthwise_conv(x)
@@ -73,8 +74,8 @@ class SeparableConvBlock(nn.Module):
         if self.norm:
             x = self.bn(x)
 
-        if self.activation:
-            x = self.swish(x)
+        # if self.activation:
+        #     x = self.swish(x)
 
         return x
 
@@ -97,7 +98,7 @@ class Classifier(nn.Module):
         ])
         # self.header = SeperableConv2d(in_channels, num_classes * num_anchors, kernel_size=3, stride=1, padding=1, relu6=True)
         self.header = SeparableConvBlock(in_channels, num_anchors * num_classes, norm=False, activation=False)
-        self.swish = ops.get_op("h_swish")(inplace=True) 
+        self.swish = ops.get_op("relu")(inplace=True) 
 
     def forward(self, inputs):
         feats = []
