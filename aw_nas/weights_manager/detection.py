@@ -87,7 +87,9 @@ class DetectionBackboneSupernet(BaseWeightsManager, nn.Module):
     def forward(self, inputs, rollout=None):
         features, out = self.backbone.get_features(inputs, self.feature_levels, rollout)
         features = [conv(f) for f, conv in zip(features, self.glue_conv)]
-        return self.head(features)
+        confidences, regression = self.head(features)
+        confidences = confidences.sigmoid()
+        return confidences, regression
 
     # ---- APIs ----
     def assemble_candidate(self, rollout):
