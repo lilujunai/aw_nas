@@ -19,6 +19,8 @@ import setproctitle
 import torch
 from torch.backends import cudnn
 
+sys.path.insert(0, os.path.join(os.path.abspath(os.path.dirname(__file__)), '..'))
+
 import aw_nas
 from aw_nas.dataset import AVAIL_DATA_TYPES
 from aw_nas import utils, BaseRollout
@@ -354,10 +356,12 @@ def mpsearch(cfg_file, seed, load, save_every, interleave_report_every,
                               evaluator=evaluator, controller=controller,
                               rollout_type=rollout_type)
 
+    # Use a barrier() to make sure that process 1 loads the model after process
+    torch.distributed.barrier()
     # setup trainer and train
     trainer.setup(load, save_every, train_dir, writer=writer,
                   interleave_report_every=interleave_report_every)
-    trainer.train()
+    trainer.train(local_rank)
 
 def _dump(rollout, dump_mode, of):
     if dump_mode == "list":
