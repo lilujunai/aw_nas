@@ -156,12 +156,12 @@ class SimpleTrainer(BaseTrainer):
         eva_stat_meters = utils.OrderedStats()
 
         for i_eva in range(1, steps+1): # mepa stands for meta param
-            print("\reva step {}/{} ; controller step {}/{}"\
-                  .format(finished_e_steps+i_eva, self.evaluator_steps,
-                          finished_c_steps, self.controller_steps),
-                  end="")
             e_stats = self.evaluator.update_evaluator(self.controller)
             eva_stat_meters.update(e_stats)
+            print("\reva step {}/{} ; controller step {}/{}; {}" \
+                  .format(finished_e_steps+i_eva, self.evaluator_steps,
+                          finished_c_steps, self.controller_steps, ";".join([" %.3f" % v for k, v in eva_stat_meters.avgs().items()])),
+                  end="")
         return eva_stat_meters.avgs()
 
     def _controller_update(self, steps, finished_e_steps, finished_c_steps):
@@ -232,7 +232,7 @@ class SimpleTrainer(BaseTrainer):
     def supported_rollout_types(cls):
         return ["discrete", "differentiable", "compare", "nasbench-101", "nasbench-201", "ofa"]
 
-    def train(self): #pylint: disable=too-many-branches
+    def train(self, rank=None): #pylint: disable=too-many-branches
         assert self.is_setup, "Must call `trainer.setup` method before calling `trainer.train`."
 
         if self.interleave_controller_every is not None:
@@ -329,7 +329,7 @@ class SimpleTrainer(BaseTrainer):
                     self.writer.add_scalar("controller_loss", c_loss_meter.avg, epoch)
 
             # maybe save checkpoints
-            self.maybe_save()
+            self.maybe_save(rank)
 
             # maybe derive archs and test
             if self.test_every and self.epoch % self.test_every == 0:
