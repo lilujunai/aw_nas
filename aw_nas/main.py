@@ -295,7 +295,7 @@ def mpsearch(cfg_file, seed, load, save_every, interleave_report_every,
     # set gpu
     _set_gpu(local_rank)
     device = torch.cuda.current_device()
-    torch.distributed.init_process_group(backend="nccl")
+    torch.distributed.init_process_group(backend="nccl", rank=int(os.environ["RANK"]), world_size=int(os.environ["WORLD_SIZE"]))
 
     LOGGER.info(("Start distributed parallel searching: (world size {}; MASTER {}:{})"
                  " rank {} local_rank {} PID {}").format(

@@ -49,10 +49,10 @@ class DetectionBackboneSupernet(BaseWeightsManager, nn.Module):
         )
         nn.Module.__init__(self)
         self.backbone = BaseWeightsManager.get_class_(search_backbone_type)(
-            search_space, device, rollout_type, 
-            num_classes=1000, 
-            multiprocess=False, 
-            gpus=gpus, 
+            search_space, device, rollout_type,
+            num_classes=1000,
+            multiprocess=False,
+            gpus=gpus,
             **search_backbone_cfg
         )
         self.multiprocess = multiprocess
@@ -81,7 +81,7 @@ class DetectionBackboneSupernet(BaseWeightsManager, nn.Module):
         if self.multiprocess:
             net = convert_sync_bn(self).to(self.device)
             object.__setattr__(
-                self, "parallel_model", DistributedDataParallel(net, self.gpus)
+                self, "parallel_model", DistributedDataParallel(net, self.gpus, self.gpus[0]).to(self.device)
             )
     
     def forward(self, inputs, rollout=None):
