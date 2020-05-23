@@ -56,6 +56,7 @@ class DetectionBackboneSupernet(BaseWeightsManager, nn.Module):
             **search_backbone_cfg
         )
         self.multiprocess = multiprocess
+        self.gpus = gpus
         
         # TODO: update SSDHeadModel in ssd_model to be able to accept yaml config
         self.feature_levels = feature_levels
@@ -75,14 +76,17 @@ class DetectionBackboneSupernet(BaseWeightsManager, nn.Module):
             **head_cfg
         )
 
-        self.to(device)
+        self._parallelize()
     
     def _parallelize(self):
         if self.multiprocess:
             net = convert_sync_bn(self).to(self.device)
             object.__setattr__(
-                self, "parallel_model", DistributedDataParallel(net, self.gpus, self.gpus[0]).to(self.device)
+                self, "parallel_model", DistributedDataParallel(net, self.gpus, find_unused_parameters=True).to(self.device)
             )
+        else:
+            self.to(self.device)
+
     
     def forward(self, inputs, rollout=None):
         features, out = self.backbone.get_features(inputs, self.feature_levels, rollout)
@@ -109,7 +113,6 @@ class DetectionBackboneSupernet(BaseWeightsManager, nn.Module):
         {
             "epoch": self.epoch,
             "state_dict": self.state_dict(),
-            # "norms": self.norms
         },
         path,
     )
@@ -151,23 +154,15 @@ class DetectionBackboneCandidateNet(CandidateNet):
         return self.super_net(inputs, self.rollout)
 
     def forward(self, inputs, single=False):
-        if single or not self.gpus or len(self.gpus) == 1:
-            return self._forward(inputs)
         if self.multiprocess:
             out = self.super_net.parallel_model.forward(inputs, self.rollout)
         elif len(self.gpus) > 1:
             out = data_parallel(
                 self, (inputs,), self.gpus, module_kwargs={"single": True}
             )
+        else:
+            return self._forward(inputs)
         return out
-
-    def gradient(self, data, criterion=lambda i, l, t: nn.CrossEntropyLoss()(l, t),
-                     parameters=None, eval_criterions=None, mode="train",
-                            zero_grads=True, return_grads=True, **kwargs):
-        if eval_criterions:
-            eval_criterions = eval_criterions[1:]
-        return super(DetectionBackboneCandidateNet, self).gradient(data, criterion, parameters, eval_criterions, mode=mode,
-                            zero_grads=zero_grads, return_grads=return_grads, **kwargs)
 
     def eval_queue(self, queue, criterions, steps=1, mode="eval", **kwargs):
         self._set_mode(mode)

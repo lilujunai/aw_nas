@@ -58,7 +58,7 @@ class OFASupernet(BaseWeightsManager, nn.Module):
         if self.multiprocess:
             net = convert_sync_bn(self).to(self.device)
             object.__setattr__(
-                self, "parallel_model", DistributedDataParallel(net, self.gpus)
+                self, "parallel_model", DistributedDataParallel(net, self.gpus, find_unused_parameters=True)
             )
 
     def reset_flops(self):
@@ -162,14 +162,14 @@ class OFACandidateNet(CandidateNet):
         return out
 
     def forward(self, inputs, single=False):  # pylint: disable=arguments-differ
-        if single or not self.gpus or len(self.gpus) == 1:
-            return self._forward(inputs)
-
         if self.multiprocess:
             out = self.super_net.parallel_model.forward(inputs, self.rollout)
         elif len(self.gpus) > 1:
             out = data_parallel(
                 self, (inputs,), self.gpus, module_kwargs={"single": True}
             )
+        else:
+            return self._forward(inputs)
+
 
         return out
