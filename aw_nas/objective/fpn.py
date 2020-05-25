@@ -87,7 +87,7 @@ class FPNObjective(BaseObjective):
 
     def get_acc(self, inputs, outputs, targets, cand_net):
         return [0.]
-        # conf_t, loc_t, shapes = self.batch_transform(inputs, outputs, targets)
+        conf_t, loc_t, shapes = self.batch_transform(inputs, outputs, targets)
         """
         target: [batch_size, anchor_num, 5], boxes + labels
         """
@@ -528,6 +528,7 @@ class FocalLoss(nn.Module):
 
             # bbox_annotation = bbox_annotation[bbox_annotation[:, 4] != -1]
             boxes, labels, *_ = annotations[j]
+            labels -= 1
 
             classification = torch.clamp(classification, 1e-4, 1.0 - 1e-4)
             
@@ -562,7 +563,7 @@ class FocalLoss(nn.Module):
 
             # assigned_annotations = bbox_annotation[IoU_argmax, :]
             assigned_boxes = boxes[IoU_argmax]
-            assigned_labels = labels[IoU_argmax]
+            assigned_labels = labels[IoU_argmax].long()
 
             targets[positive_indices, :] = 0
             targets[positive_indices, assigned_labels[positive_indices]] = 1
@@ -582,7 +583,7 @@ class FocalLoss(nn.Module):
 
             classification_losses.append(cls_loss.sum() / torch.clamp(num_positive_anchors.to(dtype), min=1.0))
 
-            if positive_indices.sum() > 0:
+            if num_positive_anchors > 0:
                 assigned_boxes = assigned_boxes[positive_indices, :]
 
                 anchor_widths_pi = anchor_widths[positive_indices]
