@@ -86,7 +86,8 @@ class FPNObjective(BaseObjective):
         return ["acc"]
 
     def get_acc(self, inputs, outputs, targets, cand_net):
-        conf_t, loc_t, shapes = self.batch_transform(inputs, outputs, targets)
+        return [0.]
+        # conf_t, loc_t, shapes = self.batch_transform(inputs, outputs, targets)
         """
         target: [batch_size, anchor_num, 5], boxes + labels
         """
@@ -149,8 +150,8 @@ class FPNObjective(BaseObjective):
         return loss
 
     def _criterion(self, inputs, outputs, annotations, model):
-        conf_t, loc_t, shapes = self.batch_transform(inputs, outputs, annotations)
-        return self.focal_loss(outputs, (conf_t, loc_t), self.anchors(inputs.shape[-1], inputs.device))
+        # conf_t, loc_t, shapes = self.batch_transform(inputs, outputs, annotations)
+        return self.focal_loss(outputs, annotations, self.anchors(inputs.shape[-1], inputs.device))
 
     def on_epoch_start(self, epoch):
         super(FPNObjective, self).on_epoch_start(epoch)
