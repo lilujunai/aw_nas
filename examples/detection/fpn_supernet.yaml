@@ -135,7 +135,7 @@ final_model_cfg:
     repeat: 4
     num_layers: 3
 
-  backbone_state_dict_path: /home/tangchangcheng/scripts/mbv3_595M.pt
+  backbone_state_dict_path: /home/tangchangcheng/scripts/ofa_supernet_1.0.pt
 
 
 final_trainer_type: det_final_trainer

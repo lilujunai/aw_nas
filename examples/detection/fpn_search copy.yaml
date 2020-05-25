@@ -1,0 +1,156 @@
+rollout_type: &rollout_type ofa
+num_classes: &num_classes 90
+blocks: &blocks [1, 4, 4, 4, 4, 4]
+expansions: &expansions [1, 6, 6, 6, 6, 6]
+crop_size: &crop_size 512
+## ---- Component search_space ----
+# ---- Type ofa ----
+search_space_type: ofa
+search_space_cfg:
+  num_cell_groups: *blocks
+  expansions: *expansions
+  schedule_cfg:
+    kernel_choice:
+        type: value
+        boundary: [1, 60, 120]
+        value: [[7], [7, 5], [7, 5, 3]]
+    width_choice:
+      type: value
+      boundary: [1, 180, 240]
+      value: [[6], [6,5,4], [6,5,4,3,2]]
+    depth_choice:
+      type: value
+      boundary: [1, 300, 360]
+      value: [[4], [4, 3], [4,3,2]]
+# ---- End Type mnsanet_ofa ----
+## ---- End Component search_space ----
+
+## ---- Component dataset ----
+dataset_type: coco
+dataset_cfg:
+  load_train_only: false
+  random_choose: false
+  random_seed: 123
+  train_crop_size: *crop_size
+  test_crop_size: *crop_size
+  # image_mean: [103.94, 116.78, 123.68]
+  # image_std: [1, 1, 1]
+  image_mean: [0.485, 0.456, 0.406]
+  image_std: [0.229, 0.224, 0.225]
+  normalize: true
+  normalize_box: false
+# ---- End Type cifar10 ----
+## ---- End Component dataset ----
+
+## ---- Component controller ----
+# ---- Type rl ----
+controller_type: ofa
+controller_cfg:
+  # Schedulable attributes:
+  rollout_type: *rollout_type
+# ---- End Type rl ----
+## ---- End Component controller ----
+
+## ---- Component evaluator ----
+# ---- Type mepa ----
+evaluator_type: mepa
+evaluator_cfg:
+  # Schedulable attributes: controller_surrogate_steps, mepa_surrogate_steps, mepa_samples
+  load_optimizer: false
+  load_scheduler: false
+  rollout_type: *rollout_type
+  batch_size: 10
+  controller_surrogate_steps: 0
+  # derive_surrogate_steps: 0
+  mepa_surrogate_steps: 0
+  mepa_optimizer:
+    lr: 0.0001
+    momentum: 0.97
+    type: SGD
+    weight_decay: 0.0001
+  mepa_scheduler:
+    eta_min: 0.0
+    T_max: 500
+    type: CosineAnnealingLR
+  surrogate_optimizer: null
+  surrogate_scheduler: null
+  mepa_samples: 1
+  data_portion:
+  - 0.0
+  - 0.95 # train evaluator weights
+  - 0.05 # for train controller
+  schedule_every_batch: true
+  mepa_as_surrogate: false
+  bptt_steps: 35
+  schedule_cfg: null
+  workers_per_queue: 8
+  multiprocess: true
+# ---- End Type mepa ----
+## ---- End Component evaluator ----
+
+## ---- Component weights_manager ----
+# ---- Type supernet ----
+weights_manager_type: det_supernet
+weights_manager_cfg:
+  # Schedulable attributes: 
+  rollout_type: *rollout_type
+  search_backbone_type: ofa_supernet
+  search_backbone_cfg:
+    backbone_type: mbv3_backbone
+    backbone_cfg:
+      blocks: *blocks
+      strides: [1, 2, 2, 2, 1, 2]
+      expansions: *expansions
+      acts: ["relu", "relu", "relu", "h_swish", "h_swish", "h_swish"]
+      channels: [16, 16, 24, 32, 64, 96, 160, 320, 1280]
+      mult_ratio: 1.
+      kernel_sizes: [3, 5, 7]
+      num_classes: *num_classes
+      block_type: mbv3_block
+      pretrained_path: /home/tangchangcheng/scripts/ofa_supernet_1.0.pt
+
+  head_type: efficientdet_head_final_model
+  head_cfg:
+    channels: 88
+    attention: true
+    repeat: 4
+    num_layers: 3
+    # feature_channels: [40, 112, 320]
+    pretrained_path: /home/tangchangcheng/scripts/efficient_head_d1_revised.pth
+  num_classes: *num_classes
+  multiprocess: true
+  
+# ---- End Type supernet ----
+## ---- End Component weights_manager ----
+
+objective_type: fpn_detection
+objective_cfg:
+  # Schedulable attributes:
+  num_classes: 90
+  nms_threshold: 0.5
+  pyramid_levels: [3, 4, 5, 6, 7]
+  scales: [0, 1, 2]
+  ratios: [[1.0, 1.0], [1.4, 0.7], [0.7, 1.4]]
+  crop_size: *crop_size
+  top_k: 200
+#   latency_file: latency_block.txt
+
+## ---- Component trainer ----
+# ---- Type simple ----
+trainer_type: simple
+trainer_cfg:
+  # Schedulable attributes: controller_samples, derive_samples
+  rollout_type: *rollout_type
+  epochs: 500
+  test_every: 50
+  controller_scheduler: null
+  controller_samples: 1
+  derive_samples: 1
+  evaluator_steps: null
+  controller_steps: 0
+  controller_train_every: 1
+  controller_train_begin: 1001
+  interleave_controller_every: null
+  schedule_cfg: null
+# ---- End Type simple ----
+## ---- End Component trainer ----
