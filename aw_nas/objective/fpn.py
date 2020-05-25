@@ -34,7 +34,7 @@ class FPNObjective(BaseObjective):
 
         self.anchors = Anchors(pyramid_levels=pyramid_levels, scales=scales, ratios=ratios)
         self.target_transform = TargetTransform(0.5, num_classes)
-        self.focal_loss = FocalLoss(self.anchors)
+        self.focal_loss = FocalLoss()
         self.predictor = PredictModel(self.anchors, num_classes, top_k, confidence_thresh, nms_threshold, crop_size)
         self.soft_loss_coeff = soft_loss_coeff
 
@@ -69,7 +69,6 @@ class FPNObjective(BaseObjective):
         shapes = []
         for i, (boxes, labels, _id, height, width) in enumerate(annotations):
             labels = labels - 1
-            assert all(labels >= 0) and all(labels <= 89)
             conf_t, loc_t = self.target_transform(boxes.to(device), labels.to(device), anchors)
             classification_t[i] = conf_t
             location_t.append(loc_t.to(device))
@@ -151,7 +150,7 @@ class FPNObjective(BaseObjective):
 
     def _criterion(self, inputs, outputs, annotations, model):
         conf_t, loc_t, shapes = self.batch_transform(inputs, outputs, annotations)
-        return self.focal_loss(outputs, (conf_t, loc_t))
+        return self.focal_loss(outputs, (conf_t, loc_t), self.anchors(inputs.shape[-1], inputs.device))
 
     def on_epoch_start(self, epoch):
         super(FPNObjective, self).on_epoch_start(epoch)
@@ -228,7 +227,7 @@ class PredictModel(nn.Module):
 
     def forward(self, confidences, regressions, img_shape):
         # anchor is not normalized
-        anchors = self.anchors(img_shape).to(confidences.device)
+        anchors = self.anchors(img_shape, confidences.device)
         
         num = confidences.shape[0]
         scores = torch.max(confidences, dim=2, keepdim=True)[0]
@@ -265,9 +264,9 @@ class PredictModel(nn.Module):
                 
 
 
-class FocalLoss(nn.Module):
+class XX(nn.Module):
     def __init__(self, anchors, alpha=0.25, gamma=2.0):
-        super(FocalLoss, self).__init__()
+        super(XX, self).__init__()
         self.alpha = alpha
         self.gamma = gamma
         self.anchors = anchors
@@ -430,7 +429,7 @@ class Anchors(nn.Module):
         self.last_shape = None
         self.dtype = np.float32
 
-    def forward(self, image_shape, dtype=torch.float32):
+    def forward(self, image_shape, device, dtype=torch.float32):
         """Generates multiscale anchor boxes.
 
         Args:
@@ -491,9 +490,131 @@ class Anchors(nn.Module):
 
         anchor_boxes = np.vstack(boxes_all)
 
-        anchor_boxes = torch.from_numpy(anchor_boxes.astype(self.dtype))
+        anchor_boxes = torch.from_numpy(anchor_boxes.astype(self.dtype)).to(device)
 
         # save it for later use to reduce overhead
         self.anchors[image_shape] = anchor_boxes
         return anchor_boxes
 
+
+class FocalLoss(nn.Module):
+    def __init__(self, alpha=0.25, gamma=2.0):
+        super(FocalLoss, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+
+    def forward(self, predictions, annotations, anchor):
+        classifications, regressions = predictions
+        alpha = self.alpha
+        gamma = self.gamma
+        batch_size = classifications.shape[0]
+        classification_losses = []
+        regression_losses = []
+
+        dtype = anchor.dtype
+        device = classifications.device
+
+        anchor_widths = anchor[:, 3] - anchor[:, 1]
+        anchor_heights = anchor[:, 2] - anchor[:, 0]
+        anchor_ctr_x = anchor[:, 1] + 0.5 * anchor_widths
+        anchor_ctr_y = anchor[:, 0] + 0.5 * anchor_heights
+
+        for j in range(batch_size):
+
+            classification = classifications[j, :, :]
+            regression = regressions[j, :, :]
+
+            boxes, labels = annotations[j]
+            # bbox_annotation = bbox_annotation[bbox_annotation[:, 4] != -1]
+
+            classification = torch.clamp(classification, 1e-4, 1.0 - 1e-4)
+            
+            if boxes.shape[0] == 0:
+                alpha_factor = torch.ones_like(classification) * alpha
+                alpha_factor = alpha_factor.to(device)
+                alpha_factor = 1. - alpha_factor
+                focal_weight = classification
+                focal_weight = alpha_factor * torch.pow(focal_weight, gamma)
+                
+                bce = -(torch.log(1.0 - classification))
+                
+                cls_loss = focal_weight * bce
+                
+                regression_losses.append(torch.tensor(0).to(dtype).to(device))
+                classification_losses.append(cls_loss.sum())
+
+                continue
+                
+            IoU = box_utils.calc_iou(anchor[:, :], boxes)
+
+            IoU_max, IoU_argmax = torch.max(IoU, dim=1)
+
+            # compute the loss for classification
+            targets = torch.ones_like(classification).to(device) * -1
+
+            targets[torch.lt(IoU_max, 0.4), :] = 0
+
+            positive_indices = torch.ge(IoU_max, 0.5)
+
+            num_positive_anchors = positive_indices.sum()
+
+            # assigned_annotations = bbox_annotation[IoU_argmax, :]
+            assigned_boxes = boxes[IoU_argmax]
+            assigned_labels = labels[IoU_argmax]
+
+            targets[positive_indices, :] = 0
+            targets[positive_indices, assigned_labels[positive_indices]] = 1
+
+            alpha_factor = torch.ones_like(targets).to(device) * alpha
+
+            alpha_factor = torch.where(torch.eq(targets, 1.), alpha_factor, 1. - alpha_factor)
+            focal_weight = torch.where(torch.eq(targets, 1.), 1. - classification, classification)
+            focal_weight = alpha_factor * torch.pow(focal_weight, gamma)
+
+            bce = -(targets * torch.log(classification) + (1.0 - targets) * torch.log(1.0 - classification))
+
+            cls_loss = focal_weight * bce
+
+            zeros = torch.zeros_like(cls_loss).to(device)
+            cls_loss = torch.where(torch.ne(targets, -1.0), cls_loss, zeros)
+
+            classification_losses.append(cls_loss.sum() / torch.clamp(num_positive_anchors.to(dtype), min=1.0))
+
+            if positive_indices.sum() > 0:
+                assigned_boxes = assigned_boxes[positive_indices, :]
+
+                anchor_widths_pi = anchor_widths[positive_indices]
+                anchor_heights_pi = anchor_heights[positive_indices]
+                anchor_ctr_x_pi = anchor_ctr_x[positive_indices]
+                anchor_ctr_y_pi = anchor_ctr_y[positive_indices]
+
+                gt_widths = assigned_boxes[:, 2] - assigned_boxes[:, 0]
+                gt_heights = assigned_boxes[:, 3] - assigned_boxes[:, 1]
+                gt_ctr_x = assigned_boxes[:, 0] + 0.5 * gt_widths
+                gt_ctr_y = assigned_boxes[:, 1] + 0.5 * gt_heights
+
+                # efficientdet style
+                gt_widths = torch.clamp(gt_widths, min=1)
+                gt_heights = torch.clamp(gt_heights, min=1)
+
+                targets_dx = (gt_ctr_x - anchor_ctr_x_pi) / anchor_widths_pi
+                targets_dy = (gt_ctr_y - anchor_ctr_y_pi) / anchor_heights_pi
+                targets_dw = torch.log(gt_widths / anchor_widths_pi)
+                targets_dh = torch.log(gt_heights / anchor_heights_pi)
+
+                targets = torch.stack((targets_dy, targets_dx, targets_dh, targets_dw))
+                targets = targets.t()
+
+                regression_diff = torch.abs(targets - regression[positive_indices, :])
+
+                regression_loss = torch.where(
+                    torch.le(regression_diff, 1.0 / 9.0),
+                    0.5 * 9.0 * torch.pow(regression_diff, 2),
+                    regression_diff - 0.5 / 9.0
+                )
+                regression_losses.append(regression_loss.mean())
+            else:
+                regression_losses.append(torch.tensor(0).to(dtype).to(device))
+
+        return torch.stack(classification_losses).mean(dim=0, keepdim=True), \
+               torch.stack(regression_losses).mean(dim=0, keepdim=True)
