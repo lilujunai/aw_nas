@@ -9,15 +9,15 @@ search_space_cfg:
   schedule_cfg:
     kernel_choice:
         type: value
-        boundary: [1, 60, 120]
+        boundary: [1, 100, 160]
         value: [[7], [7, 5], [7, 5, 3]]
     width_choice:
       type: value
-      boundary: [1, 180, 240]
+      boundary: [1, 220, 280]
       value: [[6], [6,5,4], [6,5,4,3,2]]
     depth_choice:
       type: value
-      boundary: [1, 300, 360]
+      boundary: [1, 340, 400]
       value: [[4], [4, 3], [4,3,2]]
 # ---- End Type mnsanet_ofa ----
 ## ---- End Component search_space ----
