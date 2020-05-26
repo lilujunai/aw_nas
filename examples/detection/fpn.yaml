@@ -27,12 +27,6 @@ dataset_cfg:
   random_seed: 123
   train_crop_size: 512
   test_crop_size: 512
-  # image_mean: [103.94, 116.78, 123.68]
-  # image_std: [1, 1, 1]
-  image_mean: [0.406, 0.456, 0.485]
-  image_std: [0.225, 0.224, 0.229]
-  normalize: true
-  normalize_box: false
 # ---- End Type cifar10 ----
 ## ---- End Component dataset ----
 
@@ -97,7 +91,6 @@ objective_cfg:
   pyramid_levels: [3, 4, 5, 6, 7]
   scales: [0, 1, 2]
   ratios: [[1.0, 1.0], [1.4, 0.7], [0.7, 1.4]]
-  crop_size: 512
   top_k: 200
   confidence_thresh: 0.05
 

@@ -25,14 +25,9 @@ dataset_cfg:
   load_train_only: false
   random_choose: false
   random_seed: 123
-  train_crop_size: 300
-  test_crop_size: 300
-  # image_mean: [103.94, 116.78, 123.68]
-  # image_std: [1, 1, 1]
-  image_mean: [0.406, 0.456, 0.485]
-  image_std: [0.225, 0.224, 0.229]
-  normalize: true
-  normalize_box: false
+  train_crop_size: 512
+  test_crop_size: 512
+
 # ---- End Type cifar10 ----
 ## ---- End Component dataset ----
 
@@ -97,7 +92,6 @@ objective_cfg:
   pyramid_levels: [3, 4, 5, 6, 7]
   scales: [0, 1, 2]
   ratios: [[1.0, 1.0], [1.4, 0.7], [0.7, 1.4]]
-  crop_size: 300
   top_k: 200
   confidence_thresh: 0.05
 
@@ -132,8 +126,8 @@ final_model_cfg:
     strides: [1, 2, 2, 2, 1, 2]
     mult_ratio: 1.
     kernel_sizes: [3, 5, 7]
-  backbone_state_dict_path: null
-  head_type: efficientdet_head_final_model
+  backbone_state_dict_path: nullefficientdet_head_final_model
+  head_type: 
   head_cfg:
     channels: 88
     attention: True

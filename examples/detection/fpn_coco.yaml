@@ -27,10 +27,6 @@ dataset_cfg:
   random_seed: 123
   train_crop_size: 300
   train_sets: [["2017", "val"]]
-  image_mean: [0.406, 0.456, 0.485]
-  image_std: [0.225, 0.224, 0.229]
-  normalize: true
-  normalize_box: false
 
 # ---- End Type cifar10 ----
 ## ---- End Component dataset ----
