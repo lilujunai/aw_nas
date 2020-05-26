@@ -35,7 +35,7 @@ class SSDObjective(BaseObjective):
         self.num_classes = num_classes
         
         self.priors = PriorBox(min_dim, aspect_ratios, feature_maps, scales, steps, (center_variance, size_variance), clip)
-        self.target_transform = TargetTransform(0.5,  (center_variance, size_variance))
+        self.target_transform = TargetTransform(0.5, (center_variance, size_variance))
         self.box_loss = MultiBoxLoss(num_classes, nms_threshold, True, 0, True, 3, 1 - nms_threshold, False)
         self.predictor = PredictModel(num_classes, 0, 200, 0.01, nms_threshold, priors=self.priors)
 
@@ -51,23 +51,19 @@ class SSDObjective(BaseObjective):
         """
         device = inputs.device
         img_shape = inputs.shape[-1]
-        batch_size = outputs[0].shape[0]
+        batch_size = inputs.shape[0]
         priors = self.priors.forward(img_shape).to(device)
         num_priors = priors.shape[0]
         location_t = torch.zeros([batch_size, num_priors, 4])
         classification_t = torch.zeros([batch_size, num_priors])
-        shapes = torch.zeros([batch_size, 3])
 
-        ids, indices = unique(annotations[:, 5], True)
-        shapes = annotations[indices, -3:]
-        for i, _id in enumerate(ids):
-            anno = annotations[annotations[:, 5] == _id]
-            boxes = anno[:, :4]
-            labels = anno[:, 4]
+        shapes = []
+        for i,  (boxes, labels, _id, height, width) in enumerate(annotations):
+            boxes /= inputs.shape[-1]
             conf_t, loc_t = self.target_transform(boxes, labels, priors)
             location_t[i] = loc_t
             classification_t[i] = conf_t
-        return classification_t.long().to(device), location_t.to(device), shapes.to(device)
+        return classification_t.long().to(device), location_t.to(device), shapes
 
     def perf_names(self):
         return ["mAP"]
@@ -81,29 +77,30 @@ class SSDObjective(BaseObjective):
         confidences, regressions = outputs
         return accuracy(confidences[keep], conf_t[keep], topk=(1, 5))
 
-    def get_perfs(self, inputs, outputs, targets, cand_net):
+    def get_mAP(self, inputs, outputs, annotations, cand_net):
         """
         Get mAP.
         """
         confidences, regression = outputs
-        ids, indices = unique(targets[:, 5], True)
-        shapes = targets[indices, -2:].cpu().detach().numpy()
-        heights, widths = shapes[:, 0], shapes[:, 1]
         detections = self.predictor(confidences, regression, inputs.shape[-1])
-        for batch_id, (_id, h, w) in enumerate(zip(ids.to(torch.long).tolist(), heights, widths)):
+        for batch_id, (_, _, _id, h, w) in enumerate(zip(annotations)):
             for j in range(self.num_classes):
                 dets = detections[batch_id][j].cpu().detach().numpy()
                 if len(dets) == 0:
                     continue
                 boxes = dets[:, :4]
-                boxes[:, 0] *= w
-                boxes[:, 2] *= w
-                boxes[:, 1] *= h
-                boxes[:, 3] *= h
+                boxes[:, 0::2] *= w
+                boxes[:, 1::2] *= h
                 scores = dets[:, 4].reshape(-1, 1)
                 cls_dets = np.hstack((boxes, scores)).astype(np.float32, copy=False)
                 self.all_boxes[j][_id] = cls_dets
         return [0.]
+    
+    def get_perfs(self, inputs, output, target, cand_net):
+        acc = self.get_acc(inputs, output, target, cand_net)
+
+        self.get_mAP(inputs, output, target, cand_net)
+        return acc
 
     def get_reward(self, inputs, outputs, targets, cand_net):
         return self.get_perfs(inputs, outputs, targets, cand_net)
