@@ -79,17 +79,8 @@ class VOCDataset(object):
 
     def __getitem__(self, index):
         image, boxes, labels, height, width = self._getitem(index)
-        labels = torch.from_numpy(labels).to(torch.long)
-        boxes = torch.from_numpy(boxes).to(torch.float)
-        # idxs = torch.ones_like(labels) * index
-        # height = torch.ones_like(labels) * height
-        # width = torch.ones_like(labels) * width
-        # anno = torch.tensor([index, height, width])
-        # targets = torch.cat([boxes, labels.to(torch.float), idxs.to(torch.float), height.to(torch.float), width.to(torch.float)], dim=1)
-        # return image, targets
         return image, (boxes, labels, index, height, width)
         
-
     def _getitem(self, index):
         img_id, (boxes, labels, is_difficult) = self.get_annotation(index)
         image = self._read_image(img_id)
@@ -99,7 +90,11 @@ class VOCDataset(object):
             image, boxes, labels = self.transform(image, boxes, labels)
 
         if self.target_transform is not None:
-            (boxes, labels) = self.target_transform(boxes, labels)
+            boxes, labels = self.target_transform(boxes, labels)
+        
+        image = torch.from_numpy(image).to(torch.float)
+        boxes = torch.from_numpy(boxes).to(torch.float)
+        labels = torch.from_numpy(labels).to(torch.long)
         return image, boxes, labels, height, width
 
     def get_image(self, index):
@@ -154,7 +149,8 @@ class VOCDataset(object):
     def _read_image(self, image_id):
         image_file = self._imgpath % image_id
         image = cv2.imread(str(image_file))
-        # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB).astype(np.float)
+        image /= 255.
         return image
 
 
@@ -165,18 +161,15 @@ class VOC(BaseDataset):
                  random_choose=False, random_seed=123,
                  train_sets=[("VOC2007", "trainval"), ("VOC2012", "trainval")],
                  test_sets=[("VOC2007", "test")],
-                 normalize=False, normalize_box=True,
-                 train_crop_size=300, test_crop_size=300, image_mean=(103.94, 116.78, 123.68), image_std=1.,
+                 train_crop_size=300, test_crop_size=300, image_mean=[0.406, 0.456, 0.485], image_std=1.,
                  iou_threshold=0.5, keep_difficult=False, relative_dir=None):
         super(VOC, self).__init__(relative_dir)
         self.load_train_only = load_train_only
         self.train_data_dir = os.path.join(self.data_dir, "train")
         self.class_name_file = class_name_file
-        self.normalize = normalize
-        self.normalize_box = normalize_box
 
-        train_transform = TrainAugmentation(train_crop_size, np.array(image_mean), np.array(image_std), normalize, normalize_box)
-        test_transform = TestTransform(test_crop_size, np.array(image_mean), np.array(image_std), normalize, normalize_box)
+        train_transform = TrainAugmentation(train_crop_size, np.array(image_mean), np.array(image_std))
+        test_transform = TestTransform(test_crop_size, np.array(image_mean), np.array(image_std))
 
         self.datasets = {}
         self.datasets['train'] = VOCDataset(self.train_data_dir, train_sets, train_transform)

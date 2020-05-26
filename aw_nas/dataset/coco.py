@@ -219,18 +219,16 @@ class COCODetection(data.Dataset):
 
     def __getitem__(self, index):
         image, boxes, labels, height, width = self._getitem(index)
-        image = image.to(torch.float)
-        boxes = boxes.to(torch.float)
-        labels = labels.to(torch.long)
         return image, (boxes, labels, index, height, width)
 
     def _getitem(self, index):
         img_path = self.img_paths[index]
         target = self.annotations[index]
-        boxes, labels = target[:, :4], target[:, -1]
+        boxes, labels = target[:, :4], target[:, 4]
 
         img = cv2.imread(img_path, cv2.IMREAD_COLOR)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.float32)
+        img /= 255.
         height, width, _ = img.shape
 
         if self.transform is not None:
@@ -238,6 +236,10 @@ class COCODetection(data.Dataset):
 
         if self.target_transform is not None:
             boxes, labels = self.target_transform(boxes, labels)
+        
+        img = torch.from_numpy(img).to(torch.float)
+        boxes = torch.from_numpy(boxes).to(torch.float)
+        labels = torch.from_numpy(labels).to(torch.long)
         return img, boxes, labels, height, width
 
     def __len__(self):
@@ -287,8 +289,7 @@ class COCODetection(data.Dataset):
         Return:
             tensorized version of img, squeezed
         '''
-        to_tensor = transforms.ToTensor()
-        return torch.Tensor(self.pull_image(index)).unsqueeze_(0)
+        return torch.tensor(self.pull_image(index)).unsqueeze_(0)
 
     def _print_detection_eval_metrics(self, coco_eval):
         IoU_lo_thresh = 0.5
@@ -404,8 +405,7 @@ class COCODataset(BaseDataset):
                  random_choose=False, random_seed=123,
                  train_sets=[("2017", "train")],
                  test_sets=[("2017", "val")],
-                 normalize=False, normalize_box=True,
-                 train_crop_size=300, test_crop_size=300, image_mean=(103.94, 116.78, 123.68), image_std=128.,
+                 train_crop_size=300, test_crop_size=300, image_mean=[0.406, 0.456, 0.485], image_std=[0.225, 0.224, 0.229],
                  iou_threshold=0.5, keep_difficult=False):
         super(COCODataset, self).__init__()
         self.load_train_only = load_train_only
@@ -414,11 +414,11 @@ class COCODataset(BaseDataset):
 
         self.iou_threshold = iou_threshold
 
-        # train_transform = TrainAugmentation(train_crop_size, np.array(image_mean), np.array(image_std), normalize, normalize_box)
-        # test_transform = TestTransform(test_crop_size, np.array(image_mean), np.array(image_std), normalize, normalize_box)
+        # train_transform = TrainAugmentation(train_crop_size, np.array(image_mean), np.array(image_std))
+        # test_transform = TestTransform(test_crop_size, np.array(image_mean), np.array(image_std))
 
-        train_transform = TrainTransformer(image_mean, image_std, train_crop_size, normalize)
-        test_transform = TestTransformer(image_mean, image_std, train_crop_size, normalize)
+        train_transform = TrainTransformer(image_mean, image_std, train_crop_size)
+        test_transform = TestTransformer(image_mean, image_std, train_crop_size)
 
         self.datasets = {}
         self.datasets["train"] = COCODetection(self.train_data_dir, train_sets, train_transform)

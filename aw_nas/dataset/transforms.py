@@ -39,7 +39,7 @@ class Resizer(object):
             boxes[:, 0::2] *= (self.img_size / width)
             boxes[:, 1::2] *= (self.img_size / height)
         
-        return torch.from_numpy(new_image).to(torch.float32), torch.from_numpy(boxes).to(torch.float32), torch.from_numpy(labels).to(torch.long)
+        return new_image, boxes, labels
 
 
 class Augmenter(object):
@@ -75,34 +75,28 @@ class Normalizer(object):
 
 
 class TrainTransformer(object):
-    def __init__(self, mean, std, crop_size, normalize=True):
+    def __init__(self, mean, std, crop_size):
         self.compose = [
             Normalizer(mean=mean, std=std),
             Augmenter(),
             Resizer(crop_size)]
-        self.normalize = normalize
     
     def __call__(self, img, boxes, labels):
-        if self.normalize:
-            img /= 255.
         for fn in self.compose:
             img, boxes, labels = fn(img, boxes, labels)
-        img = img.permute(2, 0, 1)
+        img = img.transpose(2, 0, 1)
         return img, boxes, labels
 
 
 class TestTransformer(object):
-    def __init__(self, mean, std, crop_size, normalize=True):
+    def __init__(self, mean, std, crop_size):
         self.compose = [
             Normalizer(mean=mean, std=std),
             Resizer(crop_size, False)
         ]
-        self.normalize = normalize
     
     def __call__(self, img, boxes, labels):
-        if self.normalize:
-            img /= 255.
         for fn in self.compose:
             img, boxes, labels = fn(img, boxes, labels)
-        img = img.permute(2, 0, 1)
+        img = img.transpose(2, 0, 1)
         return img, boxes, labels
