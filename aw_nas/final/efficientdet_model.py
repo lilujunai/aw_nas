@@ -24,7 +24,7 @@ from aw_nas.ops import MobileNetV3Block
 from aw_nas.utils import (RegistryMeta, box_utils, make_divisible, nms)
 from aw_nas.utils.common_utils import Context, nullcontext
 from aw_nas.utils.exception import ConfigException, expect
-from .ssd_bifpn import BiFPN, Conv2dStaticSamePadding
+from .ssd_bifpn import BiFPN, Conv2dStaticSamePadding, Swish
 
 
 # TODO: 确认是否要去掉bn
@@ -98,7 +98,8 @@ class Classifier(nn.Module):
         ])
         # self.header = SeperableConv2d(in_channels, num_classes * num_anchors, kernel_size=3, stride=1, padding=1, relu6=True)
         self.header = SeparableConvBlock(in_channels, num_anchors * num_classes, norm=False, activation=False)
-        self.swish = ops.get_op("relu")(inplace=True) 
+        self.swish = ops.get_op("h_swish")(inplace=True) 
+        # self.swish = Swish()
 
     def forward(self, inputs):
         feats = []
