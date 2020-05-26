@@ -172,7 +172,7 @@ class DetectionFinalTrainer(OFAFinalTrainer): #pylint: disable=too-many-instance
 
         for step, (inputs, targets) in enumerate(train_queue):
             inputs = inputs.to(self.device)
-            targets = targets.to(self.device)
+            # targets = targets.to(self.device)
 
             optimizer.zero_grad()
             predictions = model.forward(inputs)
@@ -208,7 +208,7 @@ class DetectionFinalTrainer(OFAFinalTrainer): #pylint: disable=too-many-instance
         with context():
             for step, (inputs, targets) in enumerate(valid_queue):
                 inputs = inputs.to(device)
-                targets = targets.to(device)
+                # targets = targets.to(device)
 
                 predictions = model.forward(inputs)
                 classification_loss, regression_loss = criterion(inputs, predictions, targets, model)

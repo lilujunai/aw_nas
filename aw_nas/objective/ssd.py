@@ -60,6 +60,8 @@ class SSDObjective(BaseObjective):
         shapes = []
         for i,  (boxes, labels, _id, height, width) in enumerate(annotations):
             boxes /= inputs.shape[-1]
+            boxes = boxes.to(device)
+            labels = labels.to(device)
             conf_t, loc_t = self.target_transform(boxes, labels, priors)
             location_t[i] = loc_t
             classification_t[i] = conf_t

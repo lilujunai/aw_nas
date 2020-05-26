@@ -44,8 +44,8 @@ def _crop(image, boxes, labels):
             max_iou = float('inf')
 
         for _ in range(50):
-            scale = random.uniform(0.3,1.)
-            min_ratio = max(0.5, scale*scale)
+            scale = random.uniform(0.3, 1.)
+            min_ratio = max(0.5, scale * scale)
             max_ratio = min(2, 1. / scale / scale)
             ratio = math.sqrt(random.uniform(min_ratio, max_ratio))
             w = int(scale * ratio * width)
@@ -115,7 +115,7 @@ def _expand(image, boxes, fill, p):
 
     height, width, depth = image.shape
     for _ in range(50):
-        scale = random.uniform(1,4)
+        scale = random.uniform(1, 4)
 
         min_ratio = max(0.5, 1./scale/scale)
         max_ratio = min(2, scale*scale)
@@ -249,16 +249,12 @@ class Preproc(object):
             image_show = draw_bbox(image_t, boxes)
             self.writer.add_image('preprocess/crop_image', image_show, self.epoch)
 
-        image_t = _distort(image_t)
+        # image_t = _distort(image_t)
         if self.writer is not None:
             image_show = draw_bbox(image_t, boxes)
             self.writer.add_image('preprocess/distort_image', image_show, self.epoch)
 
-        if self.normalize:
-            means = self.means * 255
-        else:
-            means = self.means
-        image_t, boxes = _expand(image_t, boxes, means, self.p)
+        image_t, boxes = _expand(image_t, boxes, self.means, self.p)
         if self.writer is not None:
             image_show = draw_bbox(image_t, boxes)
             self.writer.add_image('preprocess/expand_image', image_show, self.epoch)
