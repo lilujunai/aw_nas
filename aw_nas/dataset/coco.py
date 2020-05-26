@@ -61,16 +61,17 @@ class COCODetection(data.Dataset):
             (default: 'VOC2007')
     """
 
-    def __init__(self, root, image_sets, preproc=None, target_transform=None, is_test=False,
+    def __init__(self, root, image_sets, transform=None, target_transform=None, is_test=False, max_images=None,
                  dataset_name="COCO"):
         self.root = root
         self.cache_path = os.path.join(self.root, "cache")
         self.image_set = image_sets
-        self.preproc = preproc
+        self.transform = transform
         self.target_transform = target_transform
         self.name = dataset_name
         self.is_test = is_test
-        self.ids = list()
+        self.img_paths = list()
+        self.image_indexes = list()
         self.annotations = list()
         self._view_map = {
             "minival2014" : "val2014",          # 5k val2014 subset
@@ -95,7 +96,7 @@ class COCODetection(data.Dataset):
             self._class_to_ind = dict(zip(self._classes, range(self.num_classes)))
             self._class_to_coco_cat_id = dict(zip([c["name"] for c in cats],
                                                   _COCO.getCatIds()))
-            indexes = _COCO.getImgIds()
+            indexes = _COCO.getImgIds()[:max_images]
             
             if image_set.find("test") != -1:
                 print("test set will not load annotations!")
@@ -103,12 +104,8 @@ class COCODetection(data.Dataset):
                 annos, indexes = self._load_coco_annotations(coco_name, indexes, _COCO, remove_no_anno=True)
                 self.annotations.extend(annos)
             
-            self.image_indexes = indexes
-            # seems it will reduce the speed during the training.
-            # self.ids.extend(indexes)
-            # self.data_len.append(len(indexes))
-            # self.data_name.append(data_name)
-            self.ids.extend(self._load_coco_img_path(coco_name, indexes))
+            self.image_indexes.extend(indexes)
+            self.img_paths.extend(self._load_coco_img_path(coco_name, indexes))
 
 
         def collate_fn(batch):
@@ -222,31 +219,29 @@ class COCODetection(data.Dataset):
 
     def __getitem__(self, index):
         image, boxes, labels, height, width = self._getitem(index)
-        # idxs = torch.ones_like(labels) * index
-        # height = torch.ones_like(labels) * height
-        # width = torch.ones_like(labels) * width
-        # anno = torch.tensor([index, height, width])
-        # targets = torch.cat([boxes, labels.to(torch.float), idxs.to(torch.float), height.to(torch.float), width.to(torch.float)], dim=1)
-        # return image, targets
+        image = image.to(torch.float)
+        boxes = boxes.to(torch.float)
+        labels = labels.to(torch.long)
         return image, (boxes, labels, index, height, width)
 
     def _getitem(self, index):
-        img_id = self.ids[index]
+        img_path = self.img_paths[index]
         target = self.annotations[index]
         boxes, labels = target[:, :4], target[:, -1]
 
-        img = cv2.imread(img_id, cv2.IMREAD_COLOR)
+        img = cv2.imread(img_path, cv2.IMREAD_COLOR)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.float32)
         height, width, _ = img.shape
 
-        if self.preproc is not None:
-            img, boxes, labels = self.preproc(img, boxes, labels)
+        if self.transform is not None:
+            img, boxes, labels = self.transform(img, boxes, labels)
 
         if self.target_transform is not None:
             boxes, labels = self.target_transform(boxes, labels)
         return img, boxes, labels, height, width
 
     def __len__(self):
-        return len(self.ids)
+        return len(self.img_paths)
 
     def pull_image(self, index):
         '''Returns the original image object at index in PIL form
@@ -259,8 +254,8 @@ class COCODetection(data.Dataset):
         Return:
             PIL img
         '''
-        img_id = self.ids[index]
-        return cv2.imread(img_id, cv2.IMREAD_COLOR)
+        img_path = self.img_paths[index]
+        return cv2.imread(img_path, cv2.IMREAD_COLOR)
 
 
     def pull_anno(self, index):
@@ -328,10 +323,12 @@ class COCODetection(data.Dataset):
         coco_eval.summarize()
         return coco_eval.stats
 
-    def _do_detection_eval(self, res_file, output_dir):
+    def _do_detection_eval(self, res_file, output_dir, eval_ids=None):
         ann_type = "bbox"
         coco_dt = self._COCO.loadRes(res_file)
         coco_eval = COCOeval(self._COCO, coco_dt)
+        if eval_ids is not None:
+            coco_eval.params.imgIds = eval_ids
         coco_eval.params.useSegm = (ann_type == "segm")
         coco_eval.evaluate()
         coco_eval.accumulate()
@@ -388,7 +385,7 @@ class COCODetection(data.Dataset):
         with open(res_file, "w") as fid:
             json.dump(results, fid)
 
-    def evaluate_detections(self, all_boxes, output_dir):
+    def evaluate_detections(self, all_boxes, output_dir, eval_ids=None):
         res_file = os.path.join(output_dir, ("detections_" +
                                          self.coco_name +
                                          "_results"))
@@ -396,7 +393,7 @@ class COCODetection(data.Dataset):
         self._write_coco_results_file(all_boxes, res_file)
         # Only do evaluation on non-test sets
         if self.coco_name.find("test") == -1:
-            return self._do_detection_eval(res_file, output_dir)
+            return self._do_detection_eval(res_file, output_dir, eval_ids)
         # Optionally cleanup results json file
 
 
@@ -420,8 +417,8 @@ class COCODataset(BaseDataset):
         # train_transform = TrainAugmentation(train_crop_size, np.array(image_mean), np.array(image_std), normalize, normalize_box)
         # test_transform = TestTransform(test_crop_size, np.array(image_mean), np.array(image_std), normalize, normalize_box)
 
-        train_transform = TrainTransformer(image_mean, image_std, train_crop_size)
-        test_transform = TestTransformer(image_mean, image_std, train_crop_size)
+        train_transform = TrainTransformer(image_mean, image_std, train_crop_size, normalize)
+        test_transform = TestTransformer(image_mean, image_std, train_crop_size, normalize)
 
         self.datasets = {}
         self.datasets["train"] = COCODetection(self.train_data_dir, train_sets, train_transform)
@@ -448,4 +445,5 @@ class COCODataset(BaseDataset):
             f.write("\n".join(names))
 
     def evaluate_detections(self, all_boxes, output_dir):
-        return self.datasets.get("test", self.datasets["train"]).evaluate_detections(all_boxes, output_dir)
+        dataset = self.datasets.get("test", self.datasets["train"])
+        return dataset.evaluate_detections(all_boxes, output_dir, dataset.image_indexes)

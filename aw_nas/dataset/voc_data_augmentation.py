@@ -190,7 +190,7 @@ def preproc_for_test(image, insize, mean, std, normalize=False):
         image = image / 255.
     image -= mean
     image /= std
-    return image[:, :, (2, 1, 0)].transpose(2, 0, 1)
+    return image.transpose(2, 0, 1)
 
 def draw_bbox(image, bbxs, color=(0, 255, 0)):
     img = image.copy()
@@ -214,16 +214,16 @@ class Preproc(object):
     def __call__(self, image, boxes, labels):
         # some bugs
         if self.p == -2: # abs_test
-            targets = np.zeros((1,5))
+            targets = torch.zeros((1,5))
             targets[0] = image.shape[0]
             targets[0] = image.shape[1]
             image = preproc_for_test(image, self.resize, self.means, self.std, self.normalize)
-            return torch.from_numpy(image), targets[:, :-1], targets[:, -1]
+            return torch.from_numpy(image), torch.from_numpy(targets[:, :-1]), torch.from_numpy(targets[:, -1])
 
         if len(boxes) == 0:
-            targets = np.zeros((1,5))
+            targets = torch.zeros((1,5))
             image = preproc_for_test(image, self.resize, self.means, self.std, self.normalize) # some ground truth in coco do not have bounding box! weird!
-            return torch.from_numpy(image), targets[:, :-1], targets[:, -1]
+            return torch.from_numpy(image), torch.from_numpy(targets[:, :-1]), torch.from_numpy(targets[:, -1])
         if self.p == -1: # eval
             # TODO: 不太明白，这里的归一化并不是相对于300x300的，而是原图的？
             height, width, _ = image.shape
@@ -233,7 +233,7 @@ class Preproc(object):
                 boxes[:, 0::2] *= self.resize
                 boxes[:, 1::2] *= self.resize
             image = preproc_for_test(image, self.resize, self.means, self.std, self.normalize)
-            return torch.from_numpy(image), boxes, labels
+            return torch.from_numpy(image), torch.from_numpy(boxes), torch.from_numpy(labels)
 
         targets = np.concatenate([boxes, labels.reshape(-1, 1)], 1)
         image_o = image.copy()
@@ -295,11 +295,9 @@ class Preproc(object):
 
         if len(boxes_t)==0:
             image = preproc_for_test(image_o, self.resize, self.means, self.std, self.normalize)
-            return torch.from_numpy(image), boxes_o, labels_o
+            return torch.from_numpy(image), torch.from_numpy(boxes_o), torch.from_numpy(labels_o)
 
-        # labels_t = np.expand_dims(labels_t, 1)
-
-        return torch.from_numpy(image_t), boxes_t, labels_t
+        return torch.from_numpy(image_t), torch.from_numpy(boxes_t), torch.from_numpy(labels_t)
 
     def add_writer(self, writer, epoch=None):
         self.writer = writer

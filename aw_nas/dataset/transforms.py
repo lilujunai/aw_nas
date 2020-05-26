@@ -8,26 +8,36 @@ from torchvision import transforms
 class Resizer(object):
     """Convert ndarrays in sample to Tensors."""
     
-    def __init__(self, img_size=512):
+    def __init__(self, img_size=512, padding=True):
         self.img_size = img_size
+        self.padding = padding
 
     def __call__(self, image, boxes, labels):
         height, width, _ = image.shape
-        if height > width:
-            scale = self.img_size / height
-            resized_height = self.img_size
-            resized_width = int(width * scale)
+
+        boxes = boxes.astype(np.float)
+
+        if self.padding:
+            if height > width:
+                scale = self.img_size / height
+                resized_height = self.img_size
+                resized_width = int(width * scale)
+            else:
+                scale = self.img_size / width
+                resized_height = int(height * scale)
+                resized_width = self.img_size
+
+            image = cv2.resize(image, (resized_width, resized_height), interpolation=cv2.INTER_LINEAR)
+
+            new_image = np.zeros((self.img_size, self.img_size, 3))
+            new_image[0:resized_height, 0:resized_width] = image
+
+            boxes *= scale
+        
         else:
-            scale = self.img_size / width
-            resized_height = int(height * scale)
-            resized_width = self.img_size
-
-        image = cv2.resize(image, (resized_width, resized_height), interpolation=cv2.INTER_LINEAR)
-
-        new_image = np.zeros((self.img_size, self.img_size, 3))
-        new_image[0:resized_height, 0:resized_width] = image
-
-        boxes *= scale
+            new_image = cv2.resize(image, (self.img_size, self.img_size), interpolation=cv2.INTER_LINEAR)
+            boxes[:, 0::2] *= (self.img_size / width)
+            boxes[:, 1::2] *= (self.img_size / height)
         
         return torch.from_numpy(new_image).to(torch.float32), torch.from_numpy(boxes).to(torch.float32), torch.from_numpy(labels).to(torch.long)
 
@@ -61,34 +71,38 @@ class Normalizer(object):
         self.std = np.array([[std]])
 
     def __call__(self, image, boxes, labels):
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         return (image.astype(np.float32) - self.mean) / self.std, boxes, labels
 
 
 class TrainTransformer(object):
-    def __init__(self, mean, std, crop_size):
+    def __init__(self, mean, std, crop_size, normalize=True):
         self.compose = [
             Normalizer(mean=mean, std=std),
             Augmenter(),
             Resizer(crop_size)]
+        self.normalize = normalize
     
     def __call__(self, img, boxes, labels):
+        if self.normalize:
+            img /= 255.
         for fn in self.compose:
             img, boxes, labels = fn(img, boxes, labels)
-        img = img.permute(2, 1, 0)
+        img = img.permute(2, 0, 1)
         return img, boxes, labels
 
 
 class TestTransformer(object):
-    def __init__(self, mean, std, crop_size):
-        self.compose = transforms.Compose([
+    def __init__(self, mean, std, crop_size, normalize=True):
+        self.compose = [
             Normalizer(mean=mean, std=std),
-            # Augmenter(),
-            Resizer(crop_size)]
-        )
+            Resizer(crop_size, False)
+        ]
+        self.normalize = normalize
     
     def __call__(self, img, boxes, labels):
+        if self.normalize:
+            img /= 255.
         for fn in self.compose:
             img, boxes, labels = fn(img, boxes, labels)
-        img = img.permute(2, 1, 0)
+        img = img.permute(2, 0, 1)
         return img, boxes, labels
