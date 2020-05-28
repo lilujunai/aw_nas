@@ -76,17 +76,18 @@ def _crop(image, boxes, labels):
             boxes_t[:, 2:] = np.minimum(boxes_t[:, 2:], roi[2:])
             boxes_t[:, 2:] -= roi[:2]
 
-            return image_t, boxes_t,labels_t
+            return image_t, boxes_t, labels_t
 
 
 def _distort(image):
+    image *= 255
     def _convert(image, alpha=1, beta=0):
         tmp = image.astype(float) * alpha + beta
         tmp[tmp < 0] = 0
         tmp[tmp > 255] = 255
         image[:] = tmp
 
-    image = image.copy()
+    image = image.copy().astype(np.float32)
 
     if random.randrange(2):
         _convert(image, beta=random.uniform(-32, 32))
@@ -94,7 +95,7 @@ def _distort(image):
     if random.randrange(2):
         _convert(image, alpha=random.uniform(0.5, 1.5))
 
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    image = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
 
     if random.randrange(2):
         tmp = image[:, :, 0].astype(int) + random.randint(-18, 18)
@@ -104,7 +105,7 @@ def _distort(image):
     if random.randrange(2):
         _convert(image[:, :, 1], alpha=random.uniform(0.5, 1.5))
 
-    image = cv2.cvtColor(image, cv2.COLOR_HSV2BGR)
+    image = cv2.cvtColor(image, cv2.COLOR_HSV2RGB) / 255
 
     return image
 
@@ -185,7 +186,6 @@ def preproc_for_test(image, insize, mean, std):
     interp_methods = [cv2.INTER_LINEAR, cv2.INTER_CUBIC, cv2.INTER_AREA, cv2.INTER_NEAREST, cv2.INTER_LANCZOS4]
     interp_method = interp_methods[random.randrange(5)]
     image = cv2.resize(image, (insize, insize), interpolation=interp_method)
-    image = image / 255.
     image -= mean
     image /= std
     return image.transpose(2, 0, 1)
@@ -221,7 +221,6 @@ class Preproc(object):
             image = preproc_for_test(image, self.resize, self.means, self.std) # some ground truth in coco do not have bounding box! weird!
             return image, targets[:, :-1], targets[:, -1]
         if self.p == -1: # eval
-            # TODO: 不太明白，这里的归一化并不是相对于300x300的，而是原图的？
             height, width, _ = image.shape
             boxes[:, 0::2] /= width
             boxes[:, 1::2] /= height
@@ -237,7 +236,7 @@ class Preproc(object):
         labels_o = targets_o[:,-1]
         boxes_o[:, 0::2] /= width_o
         boxes_o[:, 1::2] /= height_o
-        boxes *= self.resize
+        boxes_o *= self.resize
         # labels_o = np.expand_dims(labels_o, 1)
 
         if self.writer is not None:
@@ -249,7 +248,7 @@ class Preproc(object):
             image_show = draw_bbox(image_t, boxes)
             self.writer.add_image('preprocess/crop_image', image_show, self.epoch)
 
-        # image_t = _distort(image_t)
+        image_t = _distort(image_t)
         if self.writer is not None:
             image_show = draw_bbox(image_t, boxes)
             self.writer.add_image('preprocess/distort_image', image_show, self.epoch)
@@ -277,7 +276,7 @@ class Preproc(object):
         mask_b= np.minimum(b_w, b_h) > 0.01
         boxes_t = boxes[mask_b]
         labels_t = labels[mask_b].copy()
-        boxes *= self.resize
+        boxes_t *= self.resize
 
         if len(boxes_t)==0:
             image = preproc_for_test(image_o, self.resize, self.means, self.std)
