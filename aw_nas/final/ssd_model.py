@@ -100,11 +100,11 @@ class SSDFinalModel(FinalModel):
         self.num_classes = num_classes
         self.feature_level = feature_level
 
-        self.final_model = RegistryMeta.get_class('final_model', backbone_type)(search_space, device, num_classes=num_classes, schedule_cfg=schedule_cfg, **backbone_cfg)
+        self.backbone = RegistryMeta.get_class('final_model', backbone_type)(search_space, device, num_classes=num_classes, schedule_cfg=schedule_cfg, **backbone_cfg)
         if backbone_state_dict_path:
             self._load_base_net(backbone_state_dict_path)
 
-        first_stage_channel = self.final_model.get_feature_channel_num(feature_level)[0]
+        first_stage_channel = self.backbone.get_feature_channel_num(feature_level)[0]
         self.norm = ops.L2Norm(first_stage_channel, 20)
         self.head = SSDHeadFinalModel(device, num_classes, first_stage_channel, **head_cfg)
 
@@ -127,7 +127,7 @@ class SSDFinalModel(FinalModel):
             del state_model['classifier.weight']
         if 'classifier.bias' in state_model:
             del state_model['classifier.bias']
-        res = self.final_model.backbone.load_state_dict(state_model, strict=False)
+        res = self.backbone.backbone.load_state_dict(state_model, strict=False)
         print('load base_net weight successfully.', res)
 
     def _load_head(self, head_state_dict_path):
@@ -156,7 +156,7 @@ class SSDFinalModel(FinalModel):
 
     def forward(self, inputs): #pylint: disable=arguments-differ
         # features, output = self.final_model.get_det_features(inputs, self.feature_stages)
-        features, feature = self.final_model.get_features(inputs, [4, 5])
+        features, feature = self.backbone.get_features(inputs, [4, 5])
         features[0] = self.norm(features[0])
         confidences, locations = self.head(features, feature)
 
