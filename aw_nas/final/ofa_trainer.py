@@ -11,7 +11,14 @@ from aw_nas import utils
 from aw_nas.final.base import FinalTrainer
 from aw_nas.utils.common_utils import nullcontext
 from aw_nas.utils.exception import expect
-from aw_nas.utils import DataParallel
+from aw_nas.utils import DataParallel, DistributedDataParallel
+
+try:
+    from aw_nas.utils.SynchronizedBatchNormPyTorch.sync_batchnorm import (
+        convert_model as convert_sync_bn,
+    )
+except ImportError:
+    convert_sync_bn = lambda m: m
 
 
 def _warmup_update_lr(optimizer, epoch, init_lr, warmup_epochs):
@@ -258,7 +265,10 @@ class OFAFinalTrainer(FinalTrainer): #pylint: disable=too-many-instance-attribut
         self.logger.info(mismatch)
 
     def _parallelize(self):
-        if len(self.gpus) >= 2:
+        if self.multiprocess:
+            net = convert_sync_bn(self.model).to(self.device)
+            self.parallel_model = DistributedDataParallel(net, self.gpus, find_unused_parameters=True)
+        elif len(self.gpus) >= 2:
             self.parallel_model = DataParallel(self.model, self.gpus).to(self.device)
         else:
             self.parallel_model = self.model
