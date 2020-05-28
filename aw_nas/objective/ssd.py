@@ -40,6 +40,7 @@ class SSDObjective(BaseObjective):
         self.predictor = PredictModel(num_classes, 0, 200, 0.01, nms_threshold, priors=self.priors)
 
         self.all_boxes = [{} for _ in range(self.num_classes)]
+        self.cache = []
 
     @classmethod
     def supported_data_types(cls):
@@ -49,6 +50,9 @@ class SSDObjective(BaseObjective):
         """
         annotations: [-1, 4 + 1 + 1 + 2] boxes + labels + ids + shapes
         """
+        for _id, cache in self.cache:
+            if _id == id(annotations):
+                return cache
         device = inputs.device
         img_shape = inputs.shape[-1]
         batch_size = inputs.shape[0]
@@ -59,13 +63,18 @@ class SSDObjective(BaseObjective):
 
         shapes = []
         for i,  (boxes, labels, _id, height, width) in enumerate(annotations):
-            boxes /= inputs.shape[-1]
+            boxes = boxes / inputs.shape[-1]
             boxes = boxes.to(device)
             labels = labels.to(device)
             conf_t, loc_t = self.target_transform(boxes, labels, priors)
             location_t[i] = loc_t
             classification_t[i] = conf_t
-        return classification_t.long().to(device), location_t.to(device), shapes
+            shapes.append([_id, height, width])
+        
+        cache = classification_t.long().to(device), location_t.to(device), shapes
+        del self.cache[-1]
+        self.cache.append((id(annotations), cache))
+        return cache
 
     def perf_names(self):
         return ["mAP"]
