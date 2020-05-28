@@ -783,7 +783,7 @@ def mptrain(seed, cfg_file, load, load_state_dict, save_every, train_dir):
     # start training
     LOGGER.info("Start training.")
     trainer.setup(load, load_state_dict, save_every, train_dir)
-    trainer.train()
+    trainer.train(local_rank)
 
 
 # ---- Train, Test using final_trainer ----

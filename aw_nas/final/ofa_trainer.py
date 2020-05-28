@@ -146,7 +146,9 @@ class OFAFinalTrainer(FinalTrainer): #pylint: disable=too-many-instance-attribut
         self._is_setup = True
 
 
-    def save(self, path):
+    def save(self, path, rank=None):
+        if rank is not None and rank != 0:
+            return
         path = utils.makedir(path)
         if self.save_as_state_dict:
             torch.save(self.model.state_dict(), os.path.join(path, "model_state.pt"))
@@ -198,7 +200,7 @@ class OFAFinalTrainer(FinalTrainer): #pylint: disable=too-many-instance-attribut
         self.logger.info("Loaded checkpoint from %s: %s", path, ", ".join(log_strs))
         self.logger.info("Last epoch: %d", self.last_epoch)
 
-    def train(self):
+    def train(self, rank=None):
         if len(self.gpus) >= 2:
             self._forward_once_for_flops(self.model)
         for epoch in range(self.last_epoch+1, self.epochs+1):
@@ -227,10 +229,10 @@ class OFAFinalTrainer(FinalTrainer): #pylint: disable=too-many-instance-attribut
 
             if self.save_every and epoch % self.save_every == 0:
                 path = os.path.join(self.train_dir, str(epoch))
-                self.save(path)
+                self.save(path, rank)
             self.on_epoch_end(epoch)
 
-        self.save(os.path.join(self.train_dir, "final"))
+        self.save(os.path.join(self.train_dir, "final"), rank)
 
 
     def evaluate_split(self, split):
