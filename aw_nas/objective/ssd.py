@@ -95,7 +95,7 @@ class SSDObjective(BaseObjective):
         """
         confidences, regression = outputs
         detections = self.predictor(confidences, regression, inputs.shape[-1])
-        for batch_id, (_, _, _id, h, w) in enumerate(zip(annotations)):
+        for batch_id, (_, _, _id, h, w) in enumerate(annotations):
             for j in range(self.num_classes):
                 dets = detections[batch_id][j].cpu().detach().numpy()
                 if len(dets) == 0:
