@@ -232,7 +232,7 @@ class SimpleTrainer(BaseTrainer):
     def supported_rollout_types(cls):
         return ["discrete", "differentiable", "compare", "nasbench-101", "nasbench-201", "ofa"]
 
-    def train(self, rank=None): #pylint: disable=too-many-branches
+    def train(self): #pylint: disable=too-many-branches
         assert self.is_setup, "Must call `trainer.setup` method before calling `trainer.train`."
 
         if self.interleave_controller_every is not None:
@@ -329,7 +329,7 @@ class SimpleTrainer(BaseTrainer):
                     self.writer.add_scalar("controller_loss", c_loss_meter.avg, epoch)
 
             # maybe save checkpoints
-            self.maybe_save(rank)
+            self.maybe_save()
 
             # maybe derive archs and test
             if self.test_every and self.epoch % self.test_every == 0:

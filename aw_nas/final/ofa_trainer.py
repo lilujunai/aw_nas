@@ -146,7 +146,8 @@ class OFAFinalTrainer(FinalTrainer): #pylint: disable=too-many-instance-attribut
         self._is_setup = True
 
 
-    def save(self, path, rank=None):
+    def save(self, path):
+        rank = os.environ.get("LOCAL_RANK")
         if rank is not None and rank != 0:
             return
         path = utils.makedir(path)
@@ -200,7 +201,7 @@ class OFAFinalTrainer(FinalTrainer): #pylint: disable=too-many-instance-attribut
         self.logger.info("Loaded checkpoint from %s: %s", path, ", ".join(log_strs))
         self.logger.info("Last epoch: %d", self.last_epoch)
 
-    def train(self, rank=None):
+    def train(self):
         if len(self.gpus) >= 2:
             self._forward_once_for_flops(self.model)
         for epoch in range(self.last_epoch+1, self.epochs+1):
@@ -229,10 +230,10 @@ class OFAFinalTrainer(FinalTrainer): #pylint: disable=too-many-instance-attribut
 
             if self.save_every and epoch % self.save_every == 0:
                 path = os.path.join(self.train_dir, str(epoch))
-                self.save(path, rank)
+                self.save(path)
             self.on_epoch_end(epoch)
 
-        self.save(os.path.join(self.train_dir, "final"), rank)
+        self.save(os.path.join(self.train_dir, "final"))
 
 
     def evaluate_split(self, split):

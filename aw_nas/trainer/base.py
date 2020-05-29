@@ -115,7 +115,8 @@ class BaseTrainer(Component):
                 self.evaluator.save(os.path.join(dir_, "evaluator.pt"))
             self.logger.info("Final Saving: Dump controller to directory %s", dir_)
 
-    def maybe_save(self, rank=None):
+    def maybe_save(self):
+        rank = os.environ.get("LOCAL_RANK")
         if self.save_every is not None and self.train_dir and self.epoch % self.save_every == 0:
             if rank is None or rank == 0:
                 self.controller.save(self._save_path("controller"))
