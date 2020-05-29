@@ -20,7 +20,7 @@ search_space_cfg:
 
 ## ---- Component dataset ----
 # ---- Type cifar10 ----
-dataset_type: voc
+dataset_type: coco
 dataset_cfg:
   load_train_only: false
   random_choose: false
@@ -82,7 +82,7 @@ weights_manager_cfg:
 # ---- End Type supernet ----
 ## ---- End Component weights_manager ----
 
-objective_type: ssd_detection
+objective_type: fpn_detection
 objective_cfg:
   # Schedulable attributes:
   num_classes: 21
