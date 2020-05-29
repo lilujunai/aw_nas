@@ -226,6 +226,9 @@ def search(cfg_file, gpu, seed, load, save_every, interleave_report_every,
     trainer = _init_components_from_cfg(cfg, device)[-1]
 
     # setup trainer and train
+    torch.distributed.barrier()
+    if local_rank != 0:
+        save_every = None
     trainer.setup(load, save_every, train_dir, writer=writer,
                   interleave_report_every=interleave_report_every)
     trainer.train()
@@ -359,9 +362,11 @@ def mpsearch(cfg_file, seed, load, save_every, interleave_report_every,
     # Use a barrier() to make sure that process 1 loads the model after process
     torch.distributed.barrier()
     # setup trainer and train
+    if local_rank != 0:
+        save_every = None
     trainer.setup(load, save_every, train_dir, writer=writer,
                   interleave_report_every=interleave_report_every)
-    trainer.train(local_rank)
+    trainer.train()
 
 def _dump(rollout, dump_mode, of):
     if dump_mode == "list":
@@ -783,7 +788,7 @@ def mptrain(seed, cfg_file, load, load_state_dict, save_every, train_dir):
     # start training
     LOGGER.info("Start training.")
     trainer.setup(load, load_state_dict, save_every, train_dir)
-    trainer.train(local_rank)
+    trainer.train()
 
 
 # ---- Train, Test using final_trainer ----
