@@ -161,7 +161,7 @@ class VOC(BaseDataset):
                  random_choose=False, random_seed=123,
                  train_sets=[("VOC2007", "trainval"), ("VOC2012", "trainval")],
                  test_sets=[("VOC2007", "test")],
-                 train_crop_size=300, test_crop_size=300, image_mean=[0.406, 0.456, 0.485], image_std=1.,
+                 train_crop_size=300, test_crop_size=300, image_mean=[0.406, 0.456, 0.485], image_std=[0.225, 0.224, 0.229],
                  iou_threshold=0.5, keep_difficult=False, relative_dir=None):
         super(VOC, self).__init__(relative_dir)
         self.load_train_only = load_train_only
