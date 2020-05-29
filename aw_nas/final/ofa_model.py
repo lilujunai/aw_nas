@@ -74,6 +74,11 @@ class OFAGenotypeModel(FinalModel):
             mult_ratio=self.mult_ratio, num_classes=self.num_classes)
         if ofa_state_dict is not None:
             state_dict = torch.load(ofa_state_dict, map_location="cpu")
+            new_state_dict = {}
+            for k, v in state_dict:
+                if ".flex_bn." in k:
+                    k = k.replace(".flex_bn.", ".")
+                new_state_dict[k] = v
             state_dict = state_dict.get("weights_manager", state_dict)
             flexible_backbone.load_state_dict(state_dict, strict=strict)
         return flexible_backbone

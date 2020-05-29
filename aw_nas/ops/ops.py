@@ -656,18 +656,18 @@ class FlexibleDepthWiseConv(nn.Conv2d, FlexibleLayer):
 class FlexibleBatchNorm2d(nn.Module, FlexibleLayer):
     def __init__(self, num_features, eps=1e-05, momentum=0.1, affine=True):
         super(FlexibleBatchNorm2d, self).__init__()
-        self.bn = nn.BatchNorm2d(num_features, eps, momentum, affine)
+        self.flex_bn = nn.BatchNorm2d(num_features, eps, momentum, affine)
         FlexibleLayer.__init__(self)
 
     def _select_params(self, mask):
         if mask is not None:
-            running_mean = self.bn.running_mean[mask].contiguous()
-            running_var = self.bn.running_mean[mask].contiguous()
-            weight = self.bn.weight[mask].contiguous()
-            bias = self.bn.bias[mask].contiguous()
+            running_mean = self.flex_bn.running_mean[mask].contiguous()
+            running_var = self.flex_bn.running_mean[mask].contiguous()
+            weight = self.flex_bn.weight[mask].contiguous()
+            bias = self.flex_bn.bias[mask].contiguous()
             return running_mean, running_var, weight, bias
         else:
-            return self.bn.running_mean, self.bn.running_var, self.bn.weight, self.bn.bias
+            return self.flex_bn.running_mean, self.flex_bn.running_var, self.flex_bn.weight, self.flex_bn.bias
 
     def set_mask(self, mask):
         self.mask = mask
@@ -676,27 +676,27 @@ class FlexibleBatchNorm2d(nn.Module, FlexibleLayer):
         self.mask = None
     
     def forward_mask(self, inputs, mask=None):
-        if mask is None or inputs.shape[1] == self.bn.num_features:
-            return self.bn.forward(inputs)
+        if mask is None or inputs.shape[1] == self.flex_bn.num_features:
+            return self.flex_bn.forward(inputs)
         
         """ _BatchNorm official code"""
         if self.momentum is None:
             exponential_average_factor = 0.0
         else:
-            exponential_average_factor = self.bn.momentum
+            exponential_average_factor = self.flex_bn.momentum
 
-        if self.bn.training and self.bn.track_running_stats:
-            if self.bn.num_batches_tracked is not None:
-                self.bn.num_batches_tracked += 1
-                if self.bn.momentum is None:  # use cumulative moving average
-                    exponential_average_factor = 1.0 / float(self.bn.num_batches_tracked)
+        if self.flex_bn.training and self.flex_bn.track_running_stats:
+            if self.flex_bn.num_batches_tracked is not None:
+                self.flex_bn.num_batches_tracked += 1
+                if self.flex_bn.momentum is None:  # use cumulative moving average
+                    exponential_average_factor = 1.0 / float(self.flex_bn.num_batches_tracked)
                 else:  # use exponential moving average
-                    exponential_average_factor = self.bn.momentum
+                    exponential_average_factor = self.flex_bn.momentum
         running_mean, running_var, weight, bias = self._select_params(mask)
         return F.batch_norm(
             inputs, running_mean, running_var, weight, bias,
-            self.bn.training or not self.bn.track_running_stats,
-            exponential_average_factor, self.bn.eps)
+            self.flex_bn.training or not self.flex_bn.track_running_stats,
+            exponential_average_factor, self.flex_bn.eps)
 
     def forward(self, inputs):
         return self.forward_mask(inputs, self.mask)
@@ -707,7 +707,7 @@ class FlexibleBatchNorm2d(nn.Module, FlexibleLayer):
         """
         running_mean, running_var, weight, bias = self._select_params(self.mask)
         feature_dim = weight.shape[0]
-        final_bn = nn.BatchNorm2d(feature_dim, self.bn.eps, self.bn.momentum, self.bn.affine)
+        final_bn = nn.BatchNorm2d(feature_dim, self.flex_bn.eps, self.flex_bn.momentum, self.flex_bn.affine)
         for var in ["running_mean", "running_var", "weight", "bias"]:
             getattr(final_bn, var).data.copy_(eval(var))
         return final_bn
