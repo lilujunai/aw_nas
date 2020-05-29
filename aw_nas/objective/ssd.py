@@ -72,7 +72,8 @@ class SSDObjective(BaseObjective):
             shapes.append([_id, height, width])
         
         cache = classification_t.long().to(device), location_t.to(device), shapes
-        del self.cache[-1]
+        if len(self.cache) >= 1:
+            del self.cache[-1]
         self.cache.append((id(annotations), cache))
         return cache
 
