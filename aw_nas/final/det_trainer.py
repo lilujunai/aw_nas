@@ -89,7 +89,7 @@ class DetectionFinalTrainer(OFAFinalTrainer): #pylint: disable=too-many-instance
             "momentum": self.momentum,
             "weight_decay": self.weight_decay
         }
-        backbone = self.model.final_model
+        backbone = self.model.backbone
         head = self.model.head
         if not self.freeze_base_net:
             params = self.model.parameters()
