@@ -193,13 +193,12 @@ class EfficientDetFinalModel(FinalModel):
         self.num_classes = num_classes
         self.feature_levels = feature_levels
 
-        self.final_model = RegistryMeta.get_class('final_model', backbone_type)(search_space, device, num_classes=num_classes, schedule_cfg=schedule_cfg, **backbone_cfg)
+        self.backbone = RegistryMeta.get_class('final_model', backbone_type)(search_space, device, num_classes=num_classes, schedule_cfg=schedule_cfg, **backbone_cfg)
         if backbone_state_dict_path:
             self._load_base_net(backbone_state_dict_path)
 
         # 这里要给出所有的backbone中需要做BiFPN的特征维数，按照[p3, p4, p5]的顺序给出
-        # backbone_stage_channel = self.final_model.get_feature_channel_num(feature_levels)
-        backbone_stage_channel = [40, 112, 320]
+        backbone_stage_channel = self.backbone.get_feature_channel_num(feature_levels)
         self.head = EfficientDetHeadFinalModel(device, num_classes, backbone_stage_channel, **head_cfg)
 
 
@@ -214,23 +213,13 @@ class EfficientDetFinalModel(FinalModel):
         self._flops_calculated = False
         self.set_hook()
 
-        import sys
-        sys.path.append("/home/tangchangcheng/projects/Yet-Another-EfficientDet-Pytorch")
-        self.efficient_det = torch.load("/home/tangchangcheng/projects/Yet-Another-EfficientDet-Pytorch/entire_model.pth").to(device)
-
-        self.head.extras.load_state_dict(self.efficient_det.bifpn.state_dict())
-        
-        self.head.regression_headers.load_state_dict(self.efficient_det.regressor.state_dict())
-        self.head.classification_headers.load_state_dict(self.efficient_det.classifier.state_dict())
-
-
     def _load_base_net(self, backbone_state_dict_path):
         state_model = torch.load(backbone_state_dict_path, map_location=torch.device('cpu'))
         if 'classifier.weight' in state_model:
             del state_model['classifier.weight']
         if 'classifier.bias' in state_model:
             del state_model['classifier.bias']
-        res = self.final_model.backbone.load_state_dict(state_model, strict=False)
+        res = self.backbone.backbone.load_state_dict(state_model, strict=False)
         print('load base_net weight successfully.', res)
 
     def _load_head(self, head_state_dict_path):
@@ -259,16 +248,9 @@ class EfficientDetFinalModel(FinalModel):
 
     def forward(self, inputs): #pylint: disable=arguments-differ
         # 这一句话就可以表示中间层的feature？？我默认了
-        # features, _ = self.final_model.get_features(inputs, self.feature_levels)
+        features, _ = self.backbone.get_features(inputs, self.feature_levels)
         
-        # # 这里的输入是(p3, p4, p5)的feature map
-        # confidences, locations = self.head(features)
-        # confidences = confidences.sigmoid()
-        # return confidences, locations
-
-        # features, _, regression, classification, anchors = self.efficient_det(inputs)
-        features = self.efficient_det.backbone_net(inputs)
-        classification, regression = self.head(features[1:])
-        classification = classification.sigmoid()
-        
-        return classification, regression
+        # 这里的输入是(p3, p4, p5)的feature map
+        confidences, locations = self.head(features)
+        confidences = confidences.sigmoid()
+        return confidences, locations
