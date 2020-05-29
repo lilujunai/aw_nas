@@ -405,7 +405,7 @@ class COCODataset(BaseDataset):
                  random_choose=False, random_seed=123,
                  train_sets=[("2017", "train")],
                  test_sets=[("2017", "val")],
-                 train_crop_size=300, test_crop_size=300, image_mean=[0.406, 0.456, 0.485], image_std=[0.225, 0.224, 0.229],
+                 train_crop_size=300, test_crop_size=300, image_mean=[0.485, 0.456, 0.406], image_std=[0.229, 0.224, 0.225],
                  iou_threshold=0.5, keep_difficult=False):
         super(COCODataset, self).__init__()
         self.load_train_only = load_train_only
