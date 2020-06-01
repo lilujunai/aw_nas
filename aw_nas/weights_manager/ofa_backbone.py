@@ -337,6 +337,7 @@ class MobileNetV2Arch(BaseBackboneArch):
         num_classes=10,
         block_type="mbv2_block",
         pretrained_path=None,
+        stem_stride=2,
         schedule_cfg=None,
     ):
         super(MobileNetV2Arch, self).__init__(
@@ -353,11 +354,11 @@ class MobileNetV2Arch(BaseBackboneArch):
             schedule_cfg,
         )
         self.block_initializer = FlexibleBlock.get_class_(block_type)
-
+        self.stem_stride = stem_stride
         self.channels = [make_divisible(c * mult_ratio, 8) for c in channels]
         self.stem = nn.Sequential(
             nn.Conv2d(
-                3, self.channels[0], kernel_size=3, stride=2, padding=1, bias=False
+                3, self.channels[0], kernel_size=3, stride=self.stem_stride, padding=1, bias=False
             ),
             nn.BatchNorm2d(channels[0]),
             get_op("relu")(inplace=True),
