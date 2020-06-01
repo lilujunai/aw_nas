@@ -122,7 +122,7 @@ class OFAClassificationObjective(BaseObjective):
         loss = self._criterion(outputs, targets)
         if self.soft_loss_coeff > 0:
             with torch.no_grad():
-                outputs_all = cand_net.super_net.forward_all(inputs).detach()
+                outputs_all = cand_net.super_net(inputs).detach()
             
             soft = self.loss_soft(outputs, outputs_all)
             loss2 = loss + soft * self.soft_loss_coeff
