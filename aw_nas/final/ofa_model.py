@@ -17,8 +17,9 @@ class OFAGenotypeModel(FinalModel):
     NAME = "ofa_final_model"
     def __init__(self, search_space, device, genotypes,
                  backbone_type="mbv2_backbone",
-                 backbone_cfg={},
+                 backbone_cfg=None,
                  ofa_state_dict=None,
+                 num_classes=10,
                  schedule_cfg=None):
         super(OFAGenotypeModel, self).__init__(schedule_cfg)
 
@@ -27,6 +28,9 @@ class OFAGenotypeModel(FinalModel):
         self.ofa_state_dict = ofa_state_dict
         assert isinstance(genotypes, str)
         self.genotypes = list(genotype_from_str(genotypes, self.search_space)._asdict().values())
+
+        self.num_classes = num_classes
+        self.backbone_cfg = backbone_cfg or {}
 
         self.depth, self.width, self.kernel = self.parse(self.genotypes)
         self.backbone_type = backbone_type
@@ -42,11 +46,11 @@ class OFAGenotypeModel(FinalModel):
         self.set_hook()
 
     def forward(self, inputs):
-        out = self.backbone(inputs)
+        res = self.backbone(inputs)
         if not self._flops_calculated:
             self.logger.info("FLOPS: flops num = %d M", self.total_flops/1.e6)
             self._flops_calculated = True
-        return out
+        return res
 
     def get_features(self, inputs, p_levels=(4, 5)):
         return self.backbone.get_features(inputs, p_levels)
@@ -66,11 +70,12 @@ class OFAGenotypeModel(FinalModel):
         """
         ofa_state_dict includes all params and weights of FlexibileArch
         """
-        flexible_backbone = BaseBackboneArch.get_class_(self.backbone_type)(device=self.device, **self.backbone_cfg)
+        flexible_backbone = BaseBackboneArch.get_class_(self.backbone_type)(
+            device=self.device, **self.backbone_cfg)
         if ofa_state_dict is not None:
             state_dict = torch.load(ofa_state_dict, map_location="cpu")
             new_state_dict = {}
-            for k, v in state_dict:
+            for k, v in state_dict.items():
                 if ".flex_bn." in k:
                     k = k.replace(".flex_bn.", ".")
                 new_state_dict[k] = v
