@@ -51,7 +51,7 @@ class SSDObjective(BaseObjective):
         annotations: [-1, 4 + 1 + 1 + 2] boxes + labels + ids + shapes
         """
         for _id, cache in self.cache:
-            if _id == id(annotations):
+            if _id == hash(str(annotations)):
                 return cache
         device = inputs.device
         img_shape = inputs.shape[-1]
@@ -74,7 +74,7 @@ class SSDObjective(BaseObjective):
         cache = classification_t.long().to(device), location_t.to(device), shapes
         if len(self.cache) >= 1:
             del self.cache[-1]
-        self.cache.append((id(annotations), cache))
+        self.cache.append((hash(str(annotations)), cache))
         return cache
 
     def perf_names(self):
