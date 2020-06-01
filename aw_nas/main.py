@@ -283,7 +283,8 @@ def mpsearch(cfg_file, seed, load, save_every, interleave_report_every,
                 shutil.copytree(src_path, backup_code_path, ignore=_onlycopy_py)
 
         # add log file handler
-        log_file = os.path.join(train_dir, "search.log")
+        log_file = os.path.join(train_dir, "search{}.log".format(
+            "" if local_rank == 0 else "_{}".format(local_rank)))
         _logger.addFile(log_file)
 
     LOGGER.info("CWD: %s", os.getcwd())
