@@ -486,21 +486,22 @@ class MobileNetV3Arch(BaseBackboneArch):
     NAME = "mbv3_backbone"
 
     def __init__(
-        self,
-        device,
-        blocks=[1, 4, 4, 4, 4, 4],
-        strides=[1, 2, 2, 2, 1, 2],
-        expansions=[1, 6, 6, 6, 6, 6],
-        channels=[16, 16, 24, 40, 80, 112, 160, 960, 1280],
-        mult_ratio=1.0,
-        kernel_sizes=[3, 5, 7],
-        do_kernel_transform=True,
-        use_ses=[False, False, True, False, True, True],
-        acts=["relu", "relu", "relu", "h_swish", "h_swish", "h_swish"],
-        num_classes=10,
-        block_type="mbv3_block",
-        pretrained_path=None,
-        schedule_cfg=None,
+            self,
+            device,
+            blocks=[1, 4, 4, 4, 4, 4],
+            strides=[1, 2, 2, 2, 1, 2],
+            expansions=[1, 6, 6, 6, 6, 6],
+            channels=[16, 16, 24, 40, 80, 112, 160, 960, 1280],
+            mult_ratio=1.0,
+            kernel_sizes=[3, 5, 7],
+            do_kernel_transform=True,
+            use_ses=[False, False, True, False, True, True],
+            acts=["relu", "relu", "relu", "h_swish", "h_swish", "h_swish"],
+            num_classes=10,
+            block_type="mbv3_block",
+            pretrained_path=None,
+            stem_stride=2,
+            schedule_cfg=None,
     ):
         super(MobileNetV3Arch, self).__init__(
             device,
@@ -518,9 +519,10 @@ class MobileNetV3Arch(BaseBackboneArch):
         self.block_initializer = FlexibleBlock.get_class_(block_type)
         self.channels = [make_divisible(c * mult_ratio, 8) for c in channels]
 
+        self.stem_stride = stem_stride
         self.stem = nn.Sequential(
             nn.Conv2d(
-                3, self.channels[0], kernel_size=3, stride=2, padding=1, bias=False
+                3, self.channels[0], kernel_size=3, stride=self.stem_stride, padding=1, bias=False
             ),
             nn.BatchNorm2d(channels[0]),
             get_op("h_swish")(inplace=True),

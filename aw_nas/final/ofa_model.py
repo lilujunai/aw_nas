@@ -17,24 +17,27 @@ class OFAGenotypeModel(FinalModel):
     NAME = "ofa_final_model"
     def __init__(self, search_space, device, genotypes,
                  backbone_type="mbv2_backbone",
+                 backbone_cfg=None,
                  ofa_state_dict=None,
-                 kernel_sizes=[3, 5, 7],
-                 num_classes=10, layer_channels=tuple(), strides=tuple(), mult_ratio=1.,
+                 # kernel_sizes=[3, 5, 7],
+                 #layer_channels=tuple(), strides=tuple(), mult_ratio=1.,
+                 num_classes=10,
                  schedule_cfg=None):
         super(OFAGenotypeModel, self).__init__(schedule_cfg)
 
         self.search_space = search_space
         self.device = device
-        self.mult_ratio = mult_ratio
         self.ofa_state_dict = ofa_state_dict
         assert isinstance(genotypes, str)
         self.genotypes = list(genotype_from_str(genotypes, self.search_space)._asdict().values())
 
         self.num_classes = num_classes
-        self.layer_channels = layer_channels
-        self.strides = strides
-        self.kernel_sizes = kernel_sizes
-        self.max_kernel_size = max(self.kernel_sizes)
+        self.backbone_cfg = backbone_cfg or {}
+        # self.mult_ratio = mult_ratio
+        # self.layer_channels = layer_channels
+        # self.strides = strides
+        # self.kernel_sizes = kernel_sizes
+        # self.max_kernel_size = max(self.kernel_sizes)
 
         self.depth, self.width, self.kernel = self.parse(self.genotypes)
         self.backbone_type = backbone_type
@@ -49,7 +52,11 @@ class OFAGenotypeModel(FinalModel):
         self.set_hook()
 
     def forward(self, inputs):
-        return self.backbone(inputs)
+        res = self.backbone(inputs)
+        if not self._flops_calculated:
+            self.logger.info("FLOPS: flops num = %d M", self.total_flops/1.e6)
+            self._flops_calculated = True
+        return res
 
     def get_features(self, inputs, p_levels=(4, 5)):
         return self.backbone.get_features(inputs, p_levels)
@@ -70,12 +77,13 @@ class OFAGenotypeModel(FinalModel):
         ofa_state_dict includes all params and weights of FlexibileArch
         """
         flexible_backbone = BaseBackboneArch.get_class_(self.backbone_type)(
-            device=self.device, channels=self.layer_channels, kernel_sizes=self.kernel_sizes,
-            mult_ratio=self.mult_ratio, num_classes=self.num_classes)
+            device=self.device, **self.backbone_cfg)
+        # channels=self.layer_channels, kernel_sizes=self.kernel_sizes,
+            # mult_ratio=self.mult_ratio, num_classes=self.num_classes)
         if ofa_state_dict is not None:
             state_dict = torch.load(ofa_state_dict, map_location="cpu")
             new_state_dict = {}
-            for k, v in state_dict:
+            for k, v in state_dict.items():
                 if ".flex_bn." in k:
                     k = k.replace(".flex_bn.", ".")
                 new_state_dict[k] = v
