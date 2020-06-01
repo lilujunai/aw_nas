@@ -147,8 +147,8 @@ class OFAFinalTrainer(FinalTrainer): #pylint: disable=too-many-instance-attribut
 
 
     def save(self, path):
-        rank = os.environ.get("LOCAL_RANK")
-        if rank is not None and rank != 0:
+        rank = (os.environ.get("LOCAL_RANK"))
+        if rank is not None and rank != '0':
             return
         path = utils.makedir(path)
         if self.save_as_state_dict:
@@ -202,8 +202,7 @@ class OFAFinalTrainer(FinalTrainer): #pylint: disable=too-many-instance-attribut
         self.logger.info("Last epoch: %d", self.last_epoch)
 
     def train(self):
-        if len(self.gpus) >= 2:
-            self._forward_once_for_flops(self.model)
+        self._forward_once_for_flops(self.model)
         for epoch in range(self.last_epoch+1, self.epochs+1):
             self.epoch = epoch
             self.on_epoch_start(epoch)
