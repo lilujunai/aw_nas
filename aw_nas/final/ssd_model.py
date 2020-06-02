@@ -76,7 +76,7 @@ class SSDHeadFinalModel(FinalModel):
         head = HeadModel(device, num_classes=num_classes,
                                             extras=extras, regression_headers=regression_headers, classification_headers=classification_headers)
         if pretrained_path:
-            head.load(torch.load(pretrained_path, "cpu"), strict=False)
+            head.load_state_dict(torch.load(pretrained_path, "cpu"), strict=False)
         return head
 
 

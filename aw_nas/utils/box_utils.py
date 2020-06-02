@@ -175,12 +175,12 @@ def iou_of(boxes0, boxes1, eps=1e-5):
     return overlap_area / (area0 + area1 - overlap_area + eps)
 
 def calc_iou(a, b):
-    # a(anchor) [boxes, (y1, x1, y2, x2)]
+    # a(anchor) [boxes, (x1, y1, x2, y2)]
     # b(gt, coco-style) [boxes, (x1, y1, x2, y2)]
 
     area = (b[:, 2] - b[:, 0]) * (b[:, 3] - b[:, 1])
-    iw = torch.min(torch.unsqueeze(a[:, 3], dim=1), b[:, 2]) - torch.max(torch.unsqueeze(a[:, 1], 1), b[:, 0])
-    ih = torch.min(torch.unsqueeze(a[:, 2], dim=1), b[:, 3]) - torch.max(torch.unsqueeze(a[:, 0], 1), b[:, 1])
+    iw = torch.min(torch.unsqueeze(a[:, 2], dim=1), b[:, 2]) - torch.max(torch.unsqueeze(a[:, 0], 1), b[:, 0])
+    ih = torch.min(torch.unsqueeze(a[:, 3], dim=1), b[:, 3]) - torch.max(torch.unsqueeze(a[:, 3], 1), b[:, 1])
     iw = torch.clamp(iw, min=0)
     ih = torch.clamp(ih, min=0)
     ua = torch.unsqueeze((a[:, 2] - a[:, 0]) * (a[:, 3] - a[:, 1]), dim=1) + area - iw * ih
@@ -292,22 +292,22 @@ class BBoxTransform(nn.Module):
         decode_box_outputs adapted from https://github.com/google/automl/blob/master/efficientdet/anchors.py
 
         Args:
-            anchors: [batchsize, boxes, (y1, x1, y2, x2)]
-            regression: [batchsize, boxes, (dy, dx, dh, dw)]
+            anchors: [batchsize, boxes, (x1, y1, x2, y2)]
+            regression: [batchsize, boxes, (dx, dy, dw, dh)]
 
         Returns:
 
         """
-        y_centers_a = (anchors[..., 0] + anchors[..., 2]) / 2
-        x_centers_a = (anchors[..., 1] + anchors[..., 3]) / 2
-        ha = anchors[..., 2] - anchors[..., 0]
-        wa = anchors[..., 3] - anchors[..., 1]
+        x_centers_a = (anchors[..., 0] + anchors[..., 2]) / 2
+        y_centers_a = (anchors[..., 1] + anchors[..., 3]) / 2
+        wa = anchors[..., 2] - anchors[..., 0]
+        ha = anchors[..., 3] - anchors[..., 1]
 
-        w = regression[..., 3].exp() * wa
-        h = regression[..., 2].exp() * ha
+        w = regression[..., 2].exp() * wa
+        h = regression[..., 3].exp() * ha
 
-        y_centers = regression[..., 0] * ha + y_centers_a
-        x_centers = regression[..., 1] * wa + x_centers_a
+        y_centers = regression[..., 1] * ha + y_centers_a
+        x_centers = regression[..., 0] * wa + x_centers_a
 
         ymin = y_centers - h / 2.
         xmin = x_centers - w / 2.
