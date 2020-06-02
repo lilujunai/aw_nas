@@ -63,6 +63,7 @@ class SSDHeadFinalModel(FinalModel):
                  expansions,
                  channels,
                  aspect_ratios,
+                 pretrained_path=None,
                  schedule_cfg=None):
         extras, regression_headers, classification_headers = generate_headers(num_classes, feature_channels, expansions, channels, aspect_ratios, device=device)
         self.device = device
@@ -72,8 +73,12 @@ class SSDHeadFinalModel(FinalModel):
         self.regression_headers = regression_headers
         self.classification_headers = classification_headers
         expect(None not in [extras, regression_headers, classification_headers], 'Extras, regression_headers and classification_headers must be provided, got None instead.', ConfigException)
-        return HeadModel(device, num_classes=num_classes,
+        head = HeadModel(device, num_classes=num_classes,
                                             extras=extras, regression_headers=regression_headers, classification_headers=classification_headers)
+        if pretrained_path:
+            head.load(torch.load(pretrained_path, "cpu"), strict=False)
+        return head
+
 
     @classmethod
     def supported_data_types(cls):
