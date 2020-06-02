@@ -257,7 +257,6 @@ def mpsearch(cfg_file, seed, load, save_every, interleave_report_every,
     _set_gpu(local_rank)
     device = torch.cuda.current_device()
     torch.distributed.init_process_group(backend="nccl", rank=int(os.environ["RANK"]), world_size=int(os.environ["WORLD_SIZE"]))
-    torch.distributed.barrier()
 
     if vis_dir and local_rank == 0:
         vis_dir = utils.makedir(vis_dir, remove=True)
@@ -288,6 +287,9 @@ def mpsearch(cfg_file, seed, load, save_every, interleave_report_every,
                 LOGGER.info("Copy `aw_nas` source code to %s", backup_code_path)
                 shutil.copytree(src_path, backup_code_path, ignore=_onlycopy_py)
 
+    torch.distributed.barrier()
+
+    if train_dir:
         # add log file handler
         log_file = os.path.join(train_dir, "search{}.log".format(
             "" if local_rank == 0 else "_{}".format(local_rank)))
@@ -716,14 +718,16 @@ def mptrain(seed, cfg_file, load, load_state_dict, save_every, train_dir):
     _set_gpu(local_rank)
     device = torch.cuda.current_device()
     torch.distributed.init_process_group(backend="nccl")
-    torch.distributed.barrier()
 
     if train_dir:
         # backup config file, and if in `develop` mode, also backup the aw_nas source code
         if local_rank == 0:
             train_dir = utils.makedir(train_dir, remove=False)
             shutil.copyfile(cfg_file, os.path.join(train_dir, "train_config.yaml"))
+    
+    torch.distributed.barrier()
 
+    if train_dir:
         # add log file handler
         log_file = os.path.join(train_dir, "train{}.log".format(
             "" if local_rank == 0 else "_{}".format(local_rank)))
