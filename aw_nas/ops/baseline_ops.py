@@ -302,20 +302,20 @@ class MobileNetV2Block(nn.Module):
         self.C_inner = make_divisible(C * expansion, 8)
         self.stride = stride
         self.kernel_size = kernel_size
-        self.act_fn = get_op(activation)
+        self.act_fn = get_op(activation)(inplace=True)
         
         self.inv_bottleneck = None
         if expansion != 1:
             self.inv_bottleneck = inv_bottleneck or nn.Sequential(
                 nn.Conv2d(C, self.C_inner, 1, 1, 0, bias=False),
                 nn.BatchNorm2d(self.C_inner),
-                self.act_fn(inplace=True)
+                self.act_fn
             )
         
         self.depth_wise = depth_wise or nn.Sequential(
             nn.Conv2d(self.C_inner, self.C_inner, self.kernel_size, stride, padding=self.kernel_size // 2, bias=False),
             nn.BatchNorm2d(self.C_inner),
-            self.act_fn(inplace=True)
+            self.act_fn
         )
 
         self.point_linear = point_linear or nn.Sequential(
@@ -363,7 +363,7 @@ class MobileNetV3Block(nn.Module):
         self.C_inner = C * expansion
         self.stride = stride
         self.kernel_size = kernel_size
-        self.act_fn = get_op(activation)
+        self.act_fn = get_op(activation)(inplace=True)
         self.use_se = use_se
         
         self.inv_bottleneck = None
@@ -371,13 +371,13 @@ class MobileNetV3Block(nn.Module):
             self.inv_bottleneck = inv_bottleneck or nn.Sequential(
                 nn.Conv2d(C, self.C_inner, 1, 1, 0, bias=False),
                 nn.BatchNorm2d(self.C_inner),
-                self.act_fn(inplace=True)
+                self.act_fn
             )
         
         self.depth_wise = depth_wise or nn.Sequential(
             nn.Conv2d(self.C_inner, self.C_inner, self.kernel_size, stride, self.kernel_size // 2, groups=self.C_inner, bias=False),
             nn.BatchNorm2d(self.C_inner),
-            self.act_fn(inplace=True)
+            self.act_fn
         )
 
         self.point_linear = point_linear or nn.Sequential(

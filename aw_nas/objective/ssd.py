@@ -97,21 +97,21 @@ class SSDObjective(BaseObjective):
         detections = self.predictor(confidences, regression, inputs.shape[-1])
         for batch_id, (_, _, _id, h, w) in enumerate(annotations):
             for j in range(self.num_classes):
-                dets = detections[batch_id][j].cpu().detach().numpy()
+                dets = detections[batch_id][j]
                 if len(dets) == 0:
                     continue
                 boxes = dets[:, :4]
                 boxes[:, 0::2] *= w
                 boxes[:, 1::2] *= h
                 scores = dets[:, 4].reshape(-1, 1)
-                cls_dets = np.hstack((boxes, scores)).astype(np.float32, copy=False)
+                cls_dets = torch.cat((boxes, scores), dim=1).cpu().detach().numpy()
                 self.all_boxes[j][_id] = cls_dets
         return [0.]
     
     def get_perfs(self, inputs, output, target, cand_net):
         acc = self.get_acc(inputs, output, target, cand_net)
-
-        self.get_mAP(inputs, output, target, cand_net)
+        if not cand_net.training:
+            self.get_mAP(inputs, output, target, cand_net)
         return acc
 
     def get_reward(self, inputs, outputs, targets, cand_net):
@@ -126,7 +126,7 @@ class SSDObjective(BaseObjective):
             outputs: logits
             targets: labels
         """
-        return self._criterion(inputs, outputs, targets, cand_net)
+        return sum(self._criterion(inputs, outputs, targets, cand_net))
 
     def _criterion(self, inputs, outputs, annotations, model):
         conf_t, loc_t, shapes = self.batch_transform(inputs, outputs, annotations)

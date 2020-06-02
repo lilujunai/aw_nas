@@ -24,7 +24,7 @@ from aw_nas.ops import MobileNetV3Block
 from aw_nas.utils import (RegistryMeta, box_utils, make_divisible, nms)
 from aw_nas.utils.common_utils import Context, nullcontext
 from aw_nas.utils.exception import ConfigException, expect
-from .ssd_bifpn import BiFPN, Conv2dStaticSamePadding, Swish
+from .ssd_bifpn import BiFPN, Conv2dStaticSamePadding, SeparableConvBlock
 
 
 # TODO: 确认是否要去掉bn
@@ -38,7 +38,6 @@ def SeperableConv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=
         nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=1),
     )
 
-class SeparableConvBlock(nn.Module):
     """
     created by Zylo117
     """
@@ -87,7 +86,7 @@ class Classifier(nn.Module):
         self.num_layers = num_layers
         self.conv_list = nn.ModuleList([
                 # SeperableConv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1, relu6=True) for i in range(num_layers)
-                SeparableConvBlock(in_channels, in_channels, norm=False, activation=False) for i in range(num_layers)
+                SeparableConvBlock(in_channels, in_channels, norm=False) for i in range(num_layers)
             ])
 
         self.bn_list = nn.ModuleList([
@@ -97,7 +96,7 @@ class Classifier(nn.Module):
             for j in range(5)
         ])
         # self.header = SeperableConv2d(in_channels, num_classes * num_anchors, kernel_size=3, stride=1, padding=1, relu6=True)
-        self.header = SeparableConvBlock(in_channels, num_anchors * num_classes, norm=False, activation=False)
+        self.header = SeparableConvBlock(in_channels, num_anchors * num_classes, norm=False)
         self.swish = ops.get_op("h_swish")(inplace=True) 
         # self.swish = Swish()
 
@@ -252,5 +251,4 @@ class EfficientDetFinalModel(FinalModel):
         
         # 这里的输入是(p3, p4, p5)的feature map
         confidences, locations = self.head(features)
-        confidences = confidences.sigmoid()
         return confidences, locations

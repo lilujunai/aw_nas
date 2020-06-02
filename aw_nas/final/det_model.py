@@ -26,9 +26,9 @@ class HeadModel(nn.Module):
 
         self._init_weights()
 
-    def forward(self, features, output):
+    def forward(self, features):
         expect(isinstance(features, (list, tuple)), 'features must be a series of feature.', ValueError)
-        x = output
+        x = features[-1]
         for extra in self.extras:
             x = extra(x)
             features.append(x)

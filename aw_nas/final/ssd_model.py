@@ -38,7 +38,7 @@ def SeperableConv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=
     )
 
 def generate_headers(num_classes, feature_channels, expansions=[0.2, 0.25, 0.5, 0.25], channels=[1280, 512, 256, 256, 64], aspect_ratios=[[2], [2, 3], [2, 3], [2, 3], [2], [2]], device=None, **kwargs):
-    channels = [feature_channels] + channels
+    channels = feature_channels + channels
     multi_ratio = [len(r) * 2 + 2 for r in aspect_ratios]
     extras = nn.ModuleList([
         MobileNetV3Block(exp, in_channels, out_channels, stride=2, affine=True, kernel_size=3, activation='relu')
@@ -87,7 +87,7 @@ class SSDFinalModel(FinalModel):
     def __init__(self, search_space, device,
                  backbone_type,
                  backbone_cfg,
-                 feature_level=[4, 5],
+                 feature_levels=[4, 5],
                  backbone_state_dict_path=None,
                  head_type='ssd_head_final_model',
                  head_cfg={},
@@ -98,16 +98,15 @@ class SSDFinalModel(FinalModel):
         self.search_space = search_space
         self.device = device
         self.num_classes = num_classes
-        self.feature_level = feature_level
+        self.feature_levels = feature_levels
 
         self.backbone = RegistryMeta.get_class('final_model', backbone_type)(search_space, device, num_classes=num_classes, schedule_cfg=schedule_cfg, **backbone_cfg)
         if backbone_state_dict_path:
             self._load_base_net(backbone_state_dict_path)
 
-        first_stage_channel = self.backbone.get_feature_channel_num(feature_level)[0]
-        self.norm = ops.L2Norm(first_stage_channel, 20)
-        self.head = SSDHeadFinalModel(device, num_classes, first_stage_channel, **head_cfg)
-
+        feature_channels = self.backbone.get_feature_channel_num(feature_levels)
+        self.norm = ops.L2Norm(feature_channels[0], 20)
+        self.head = SSDHeadFinalModel(device, num_classes, feature_channels, **head_cfg)
 
         self.search_space = search_space
         self.device = device

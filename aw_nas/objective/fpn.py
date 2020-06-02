@@ -101,7 +101,7 @@ class FPNObjective(BaseObjective):
         Get mAP.
         """
         confidences, regression = outputs
-        
+        confidences = confidences.sigmoid()
         detections = self.predictor(confidences, regression, inputs.shape[-1])
         for batch_id, (_, _, _id, h, w) in enumerate(targets):
             _id = int(_id)
@@ -118,8 +118,8 @@ class FPNObjective(BaseObjective):
 
     def get_perfs(self, inputs, output, target, cand_net):
         acc = self.get_acc(inputs, output, target, cand_net)
-
-        self.get_mAP(inputs, output, target, cand_net)
+        if not cand_net.training:
+            self.get_mAP(inputs, output, target, cand_net)
         return acc
 
     def get_reward(self, inputs, outputs, targets, cand_net):
@@ -216,6 +216,7 @@ class PredictModel(nn.Module):
         # anchor is not normalized
         anchors, ctr_anchors = self.anchors(img_shape, confidences.device)
         
+        confidences = confidences.sigmoid()
         num = confidences.shape[0]
         scores = torch.max(confidences, dim=2, keepdim=True)[0]
         scores_over_thresh = (scores > self.confidence_thresh)[:, :, 0]
@@ -250,9 +251,9 @@ class PredictModel(nn.Module):
         return output
 
 
-class XX(nn.Module):
+class FocalLossWithoutTransformer(nn.Module):
     def __init__(self, alpha=0.25, gamma=2.0):
-        super(XX, self).__init__()
+        super(FocalLossWithoutTransformer, self).__init__()
         self.alpha = alpha
         self.gamma = gamma
 
@@ -260,6 +261,7 @@ class XX(nn.Module):
         alpha = self.alpha
         gamma = self.gamma
         classifications, regressions = predict
+        classifications = classifications.sigmoid()
         conf_t, loc_t = targets
         device = classifications.device
 
@@ -423,6 +425,7 @@ class FocalLoss(nn.Module):
     def forward(self, predictions, annotations, anchors):
         anchor, ctr_anchors = anchors
         classifications, regressions = predictions
+        classifications = classifications.sigmoid()
         alpha = self.alpha
         gamma = self.gamma
         batch_size = classifications.shape[0]

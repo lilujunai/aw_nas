@@ -14,26 +14,6 @@ import torch.nn.functional as F
 
 from aw_nas.ops import get_op
 
-class SwishImplementation(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, i):
-        result = i * torch.sigmoid(i)
-        ctx.save_for_backward(i)
-        return result
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        i = ctx.saved_variables[0]
-        sigmoid_i = torch.sigmoid(i)
-        return grad_output * (sigmoid_i * (1 + i * (1 - sigmoid_i)))
-
-class MemoryEfficientSwish(nn.Module):
-    def forward(self, x):
-        return SwishImplementation.apply(x)
-
-class Swish(nn.Module):
-    def forward(self, x):
-        return x * torch.sigmoid(x)
 
 class Conv2dStaticSamePadding(nn.Module):
     """
@@ -128,7 +108,7 @@ class SeparableConvBlock(nn.Module):
     created by Zylo117
     """
 
-    def __init__(self, in_channels, out_channels=None, norm=True, activation=False, onnx_export=False):
+    def __init__(self, in_channels, out_channels=None, norm=True, onnx_export=False):
         super(SeparableConvBlock, self).__init__()
         if out_channels is None:
             out_channels = in_channels
@@ -147,9 +127,6 @@ class SeparableConvBlock(nn.Module):
             # Warning: pytorch momentum is different from tensorflow's, momentum_pytorch = 1 - momentum_tensorflow
             self.bn = nn.BatchNorm2d(num_features=out_channels, momentum=0.01, eps=1e-3)
 
-        self.activation = activation
-        if self.activation:
-            self.swish = MemoryEfficientSwish() if not onnx_export else Swish()
 
     def forward(self, x):
         x = self.depthwise_conv(x)
@@ -157,9 +134,6 @@ class SeparableConvBlock(nn.Module):
 
         if self.norm:
             x = self.bn(x)
-
-        if self.activation:
-            x = self.swish(x)
 
         return x
 

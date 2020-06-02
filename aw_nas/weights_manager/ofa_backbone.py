@@ -45,7 +45,7 @@ class FlexibleMobileNetV2Block(MobileNetV2Block, FlexibleBlock):
     ):
         FlexibleBlock.__init__(self, schedule_cfg)
         self.activation = activation
-        act_fn = get_op(activation)
+        act_fn = get_op(activation)(inplace=True)
         C_inner = C * expansion
         self.kernel_sizes = sorted(kernel_sizes)
         self.kernel_size = self.kernel_sizes[-1]
@@ -57,7 +57,7 @@ class FlexibleMobileNetV2Block(MobileNetV2Block, FlexibleBlock):
             inv_bottleneck = nn.Sequential(
                 FlexiblePointLinear(C, C_inner, 1, 1, 0),
                 FlexibleBatchNorm2d(C_inner, affine=affine),
-                act_fn(inplace=True),
+                act_fn,
             )
 
         depth_wise = nn.Sequential(
@@ -68,7 +68,7 @@ class FlexibleMobileNetV2Block(MobileNetV2Block, FlexibleBlock):
                 do_kernel_transform=do_kernel_transform,
             ),
             FlexibleBatchNorm2d(C_inner, affine=affine),
-            act_fn(inplace=True),
+            act_fn,
         )
 
         point_linear = nn.Sequential(
@@ -172,14 +172,14 @@ class FlexibleMobileNetV3Block(MobileNetV3Block, FlexibleBlock):
         self.use_se = use_se
         self.affine = affine
 
-        self.act_fn = get_op(activation)
+        self.act_fn = get_op(activation)(inplace=True)
 
         inv_bottleneck = None
         if expansion != 1:
             inv_bottleneck = nn.Sequential(
                 FlexiblePointLinear(C, self.C_inner, 1, 1, 0),
                 FlexibleBatchNorm2d(self.C_inner, affine=affine),
-                self.act_fn(inplace=True),
+                self.act_fn,
             )
 
         depth_wise = nn.Sequential(
@@ -190,7 +190,7 @@ class FlexibleMobileNetV3Block(MobileNetV3Block, FlexibleBlock):
                 do_kernel_transform=do_kernel_transform,
             ),
             FlexibleBatchNorm2d(self.C_inner, affine=affine),
-            self.act_fn(inplace=True),
+            self.act_fn,
         )
 
         point_linear = nn.Sequential(

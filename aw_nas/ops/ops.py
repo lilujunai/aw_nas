@@ -680,7 +680,7 @@ class FlexibleBatchNorm2d(nn.Module, FlexibleLayer):
             return self.flex_bn.forward(inputs)
         
         """ _BatchNorm official code"""
-        if self.momentum is None:
+        if self.flex_bn.momentum is None:
             exponential_average_factor = 0.0
         else:
             exponential_average_factor = self.flex_bn.momentum

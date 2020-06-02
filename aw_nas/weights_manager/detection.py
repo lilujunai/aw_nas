@@ -62,12 +62,6 @@ class DetectionBackboneSupernet(BaseWeightsManager, nn.Module):
         self.feature_levels = feature_levels
         backbone_stage_channel = self.backbone.backbone.get_feature_channel_num(feature_levels)
         cfg_channels = head_cfg.get("feature_channels", backbone_stage_channel)
-        self.glue_conv = nn.ModuleList()
-        for c1, c2 in zip(backbone_stage_channel, cfg_channels):
-            if c1 != c2:
-                self.glue_conv.append(nn.Conv2d(c1, c2, 1))
-            else:
-                self.glue_conv.append(nn.Identity())
 
         self.head = FinalModel.get_class_(head_type)(
             device,
@@ -90,9 +84,7 @@ class DetectionBackboneSupernet(BaseWeightsManager, nn.Module):
     
     def forward(self, inputs, rollout=None):
         features, out = self.backbone.get_features(inputs, self.feature_levels, rollout)
-        features = [conv(f) for f, conv in zip(features, self.glue_conv)]
         confidences, regression = self.head(features)
-        confidences = confidences.sigmoid()
         return confidences, regression
 
     # ---- APIs ----
