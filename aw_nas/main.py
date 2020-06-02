@@ -253,6 +253,12 @@ def mpsearch(cfg_file, seed, load, save_every, interleave_report_every,
            train_dir, vis_dir, develop):
     # check dependency and initialize visualization writer
     local_rank = int(os.environ["LOCAL_RANK"])
+    # set gpu
+    _set_gpu(local_rank)
+    device = torch.cuda.current_device()
+    torch.distributed.init_process_group(backend="nccl", rank=int(os.environ["RANK"]), world_size=int(os.environ["WORLD_SIZE"]))
+    torch.distributed.barrier()
+
     if vis_dir and local_rank == 0:
         vis_dir = utils.makedir(vis_dir, remove=True)
         try:
@@ -292,11 +298,6 @@ def mpsearch(cfg_file, seed, load, save_every, interleave_report_every,
 
     setproctitle.setproctitle("awnas-search config: {}; train_dir: {}; vis_dir: {}; cwd: {}"\
                               .format(cfg_file, train_dir, vis_dir, os.getcwd()))
-
-    # set gpu
-    _set_gpu(local_rank)
-    device = torch.cuda.current_device()
-    torch.distributed.init_process_group(backend="nccl", rank=int(os.environ["RANK"]), world_size=int(os.environ["WORLD_SIZE"]))
 
     LOGGER.info(("Start distributed parallel searching: (world size {}; MASTER {}:{})"
                  " rank {} local_rank {} PID {}").format(
@@ -357,8 +358,6 @@ def mpsearch(cfg_file, seed, load, save_every, interleave_report_every,
                               evaluator=evaluator, controller=controller,
                               rollout_type=rollout_type)
 
-    # Use a barrier() to make sure that process 1 loads the model after process
-    torch.distributed.barrier()
     # setup trainer and train
     if local_rank != 0:
         save_every = None
@@ -713,6 +712,12 @@ def derive(cfg_file, load, out_file, n, save_plot, test, steps, gpu, seed, dump_
               help="the directory to save checkpoints")
 def mptrain(seed, cfg_file, load, load_state_dict, save_every, train_dir):
     local_rank = int(os.environ["LOCAL_RANK"])
+    # set gpu
+    _set_gpu(local_rank)
+    device = torch.cuda.current_device()
+    torch.distributed.init_process_group(backend="nccl")
+    torch.distributed.barrier()
+
     if train_dir:
         # backup config file, and if in `develop` mode, also backup the aw_nas source code
         if local_rank == 0:
@@ -729,11 +734,6 @@ def mptrain(seed, cfg_file, load, load_state_dict, save_every, train_dir):
 
     setproctitle.setproctitle("awnas-train config: {}; train_dir: {}; cwd: {}"\
                               .format(cfg_file, train_dir, os.getcwd()))
-
-    # set gpu
-    _set_gpu(local_rank)
-    device = torch.cuda.current_device()
-    torch.distributed.init_process_group(backend="nccl")
 
     LOGGER.info(("Start distributed parallel training: (world size {}; MASTER {}:{})"
                  " rank {} local_rank {} PID {}").format(
@@ -785,7 +785,6 @@ def mptrain(seed, cfg_file, load, load_state_dict, save_every, train_dir):
 
     # start training
     LOGGER.info("Start training.")
-    torch.distributed.barrier()
     if local_rank != 0:
         save_every = None
     trainer.setup(load, load_state_dict, save_every, train_dir)
