@@ -288,7 +288,7 @@ class BaseBackboneArch(Component, nn.Module):
         blocks=[1, 4, 4, 4, 4, 4],
         strides=[1, 2, 2, 1, 2, 1],
         expansions=[1, 6, 6, 6, 6, 6],
-        channels=[16, 24, 40, 80, 96, 192, 320],
+        layer_channels=[16, 24, 40, 80, 96, 192, 320],
         mult_ratio=1.0,
         kernel_sizes=[3, 5, 7],
         do_kernel_transform=True,
@@ -304,7 +304,7 @@ class BaseBackboneArch(Component, nn.Module):
         self.blocks = blocks
         self.strides = strides
         self.expansions = expansions
-        self.channels = channels
+        self.channels = layer_channels
         self.mult_ratio = mult_ratio
         self.kernel_sizes = kernel_sizes
         self.do_kernel_transform = do_kernel_transform
@@ -330,7 +330,7 @@ class MobileNetV2Arch(BaseBackboneArch):
         blocks=[1, 4, 4, 4, 4, 4, 1],
         strides=[1, 2, 2, 2, 1, 2, 1],
         expansions=[1, 6, 6, 6, 6, 6, 6],
-        channels=[32, 16, 24, 32, 64, 96, 160, 320, 1280],
+        layer_channels=[32, 16, 24, 32, 64, 96, 160, 320, 1280],
         mult_ratio=1.0,
         kernel_sizes=[3, 5, 7],
         do_kernel_transform=True,
@@ -345,7 +345,7 @@ class MobileNetV2Arch(BaseBackboneArch):
             blocks,
             strides,
             expansions,
-            channels,
+            layer_channels,
             mult_ratio,
             kernel_sizes,
             do_kernel_transform,
@@ -355,12 +355,12 @@ class MobileNetV2Arch(BaseBackboneArch):
         )
         self.block_initializer = FlexibleBlock.get_class_(block_type)
         self.stem_stride = stem_stride
-        self.channels = [make_divisible(c * mult_ratio, 8) for c in channels]
+        self.channels = [make_divisible(c * mult_ratio, 8) for c in layer_channels]
         self.stem = nn.Sequential(
             nn.Conv2d(
                 3, self.channels[0], kernel_size=3, stride=self.stem_stride, padding=1, bias=False
             ),
-            nn.BatchNorm2d(channels[0]),
+            nn.BatchNorm2d(self.channels[0]),
             get_op("relu")(inplace=True),
         )
         expect(
@@ -492,7 +492,7 @@ class MobileNetV3Arch(BaseBackboneArch):
             blocks=[1, 4, 4, 4, 4, 4],
             strides=[1, 2, 2, 2, 1, 2],
             expansions=[1, 6, 6, 6, 6, 6],
-            channels=[16, 16, 24, 40, 80, 112, 160, 960, 1280],
+            layer_channels=[16, 16, 24, 40, 80, 112, 160, 960, 1280],
             mult_ratio=1.0,
             kernel_sizes=[3, 5, 7],
             do_kernel_transform=True,
@@ -509,7 +509,7 @@ class MobileNetV3Arch(BaseBackboneArch):
             blocks,
             strides,
             expansions,
-            channels,
+            layer_channels,
             mult_ratio,
             kernel_sizes,
             do_kernel_transform,
@@ -518,14 +518,14 @@ class MobileNetV3Arch(BaseBackboneArch):
             schedule_cfg,
         )
         self.block_initializer = FlexibleBlock.get_class_(block_type)
-        self.channels = [make_divisible(c * mult_ratio, 8) for c in channels]
+        self.channels = [make_divisible(c * mult_ratio, 8) for c in layer_channels]
 
         self.stem_stride = stem_stride
         self.stem = nn.Sequential(
             nn.Conv2d(
                 3, self.channels[0], kernel_size=3, stride=self.stem_stride, padding=1, bias=False
             ),
-            nn.BatchNorm2d(channels[0]),
+            nn.BatchNorm2d(self.channels[0]),
             get_op("h_swish")(inplace=True),
         )
         expect(
