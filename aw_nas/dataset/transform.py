@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 
 from aw_nas.dataset.voc_data_augmentation import Preproc
@@ -22,6 +23,14 @@ class TrainAugmentation:
             boxes: boundding boxes in the form of (x1, y1, x2, y2).
             labels: labels of boxes.
         """
+        boxes = boxes.astype(np.float)
+        widths = boxes[:, 2] - boxes[:, 0]
+        heights = boxes[:, 3] - boxes[:, 1]
+        if widths.min() == 0 or heights.min() == 0:
+           #print(boxes)
+           idx = np.logical_and(widths > 0, heights > 0)
+           boxes = boxes[idx]
+           labels = labels[idx]
         return self.preproc(img, boxes, labels)
 
 

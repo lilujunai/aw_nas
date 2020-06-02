@@ -13,6 +13,7 @@ import torchvision.transforms as transforms
 
 from aw_nas.dataset.base import BaseDataset
 from aw_nas.dataset.transforms import *
+from aw_nas.dataset.transform import *
 from aw_nas.utils import mask as COCOmask
 from aw_nas.utils.coco import COCO
 from aw_nas.utils.coco_eval import COCOeval
@@ -414,11 +415,11 @@ class COCODataset(BaseDataset):
 
         self.iou_threshold = iou_threshold
 
-        # train_transform = TrainAugmentation(train_crop_size, np.array(image_mean), np.array(image_std))
-        # test_transform = TestTransform(test_crop_size, np.array(image_mean), np.array(image_std))
+        train_transform = TrainAugmentation(train_crop_size, np.array(image_mean), np.array(image_std))
+        test_transform = TestTransform(test_crop_size, np.array(image_mean), np.array(image_std))
 
-        train_transform = TrainTransformer(image_mean, image_std, train_crop_size)
-        test_transform = TestTransformer(image_mean, image_std, train_crop_size)
+        # train_transform = TrainTransformer(image_mean, image_std, train_crop_size)
+        # test_transform = TestTransformer(image_mean, image_std, train_crop_size)
 
         self.datasets = {}
         self.datasets["train"] = COCODetection(self.train_data_dir, train_sets, train_transform)
