@@ -128,7 +128,7 @@ final_model_cfg:
   head_type: ssd_head_final_model
   head_cfg:
     expansions: [1, 1, 1, 1]
-    channels: [960, 512, 256, 256, 128]
+    channels: [512, 256, 256, 128]
     aspect_ratios: [[2, 3], [2, 3], [2, 3], [2, 3], [2], [2]]
   backbone_state_dict_path: /home/tangchangcheng/scripts/ofa_supernet_1.0.pt
 
@@ -136,10 +136,10 @@ final_model_cfg:
 final_trainer_type: det_final_trainer
 final_trainer_cfg:
   batch_size: 32
-  epochs: 300
+  epochs: 200
   optimizer_scheduler:
-    eta_min: 0.01
-    T_max: 30
+    eta_min: 0.0
+    T_max: 200
     type: CosineAnnealingLR
   schedule_cfg: null
   weight_decay: 0.0001
