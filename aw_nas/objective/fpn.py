@@ -181,20 +181,12 @@ class TargetTransform(nn.Module):
             anchor_ctr_y_pi = anchor_ctr_y[positive_indices]
 
             """
-            order: [x1, y1, x2, y2]
+            boxes order: [x1, y1, x2, y2]
             """
             gt_widths = assigned_boxes[:, 2] - assigned_boxes[:, 0]
             gt_heights = assigned_boxes[:, 3] - assigned_boxes[:, 1]
             gt_ctr_x = assigned_boxes[:, 0] + 0.5 * gt_widths
             gt_ctr_y = assigned_boxes[:, 1] + 0.5 * gt_heights
-
-            """
-            order: [y1, x1, y2, x2]
-            """
-            # gt_widths = assigned_boxes[:, 3] - assigned_boxes[:, 1]
-            # gt_heights = assigned_boxes[:, 2] - assigned_boxes[:, 0]
-            # gt_ctr_x = assigned_boxes[:, 1] + 0.5 * gt_widths
-            # gt_ctr_y = assigned_boxes[:, 0] + 0.5 * gt_heights
 
             # efficientdet style
             gt_widths = torch.clamp(gt_widths, min=1)
@@ -205,8 +197,8 @@ class TargetTransform(nn.Module):
             targets_dw = torch.log(gt_widths / anchor_widths_pi)
             targets_dh = torch.log(gt_heights / anchor_heights_pi)
 
-            # loc_t = torch.stack((targets_dy, targets_dx, targets_dh, targets_dw)).t()
-            loc_t = torch.stack((targets_dx, targets_dy, targets_dw, targets_dh)).t()
+            loc_t = torch.stack((targets_dy, targets_dx, targets_dh, targets_dw)).t()
+            # loc_t = torch.stack((targets_dx, targets_dy, targets_dw, targets_dh)).t()
         else:
             loc_t = torch.tensor([])
 
@@ -401,9 +393,11 @@ class Anchors(nn.Module):
                 xv, yv = np.meshgrid(x, y)
                 xv = xv.reshape(-1)
                 yv = yv.reshape(-1)
-                # x1, y1, x2, y2
-                boxes = np.vstack((xv - anchor_size_x_2, yv - anchor_size_y_2,
-                                   xv + anchor_size_x_2, yv + anchor_size_y_2))
+                """
+                anchor order: [y1, x1, y2, x2]
+                """
+                boxes = np.vstack((yv - anchor_size_y_2, xv - anchor_size_x_2,
+                                   yv + anchor_size_y_2, xv + anchor_size_x_2))
                 boxes = np.swapaxes(boxes, 0, 1)
 
                 boxes_level.append(np.expand_dims(boxes, axis=1))
@@ -414,11 +408,14 @@ class Anchors(nn.Module):
         anchor_boxes = np.vstack(boxes_all)
 
         anchor_boxes = torch.from_numpy(anchor_boxes.astype(self.dtype)).to(device)
-
-        anchor_widths = anchor_boxes[:, 2] - anchor_boxes[:, 0]
-        anchor_heights = anchor_boxes[:, 3] - anchor_boxes[:, 1]
-        anchor_ctr_x = anchor_boxes[:, 0] + 0.5 * anchor_widths
-        anchor_ctr_y = anchor_boxes[:, 1] + 0.5 * anchor_heights
+        
+        """
+        anchor order: [y1, x1, y2, x2]
+        """
+        anchor_widths = anchor_boxes[:, 3] - anchor_boxes[:, 1]
+        anchor_heights = anchor_boxes[:, 2] - anchor_boxes[:, 0]
+        anchor_ctr_x = anchor_boxes[:, 1] + 0.5 * anchor_widths
+        anchor_ctr_y = anchor_boxes[:, 0] + 0.5 * anchor_heights
         ctr_anchors = anchor_ctr_x, anchor_ctr_y, anchor_heights, anchor_widths
 
         # save it for later use to reduce overhead
@@ -519,6 +516,9 @@ class FocalLoss(nn.Module):
                 anchor_ctr_x_pi = anchor_ctr_x[positive_indices]
                 anchor_ctr_y_pi = anchor_ctr_y[positive_indices]
 
+                """
+                gt boxes order: [x1, y1, x2, y2]
+                """
                 gt_widths = assigned_boxes[:, 2] - assigned_boxes[:, 0]
                 gt_heights = assigned_boxes[:, 3] - assigned_boxes[:, 1]
                 gt_ctr_x = assigned_boxes[:, 0] + 0.5 * gt_widths
@@ -533,8 +533,8 @@ class FocalLoss(nn.Module):
                 targets_dw = torch.log(gt_widths / anchor_widths_pi)
                 targets_dh = torch.log(gt_heights / anchor_heights_pi)
 
-                # targets = torch.stack((targets_dy, targets_dx, targets_dh, targets_dw))
-                targets = torch.stack((targets_dx, targets_dy, targets_dw, targets_dh))
+                targets = torch.stack((targets_dy, targets_dx, targets_dh, targets_dw))
+                # targets = torch.stack((targets_dx, targets_dy, targets_dw, targets_dh))
                 targets = targets.t()
 
                 regression_diff = torch.abs(targets - regression[positive_indices, :])

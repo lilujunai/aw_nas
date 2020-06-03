@@ -45,6 +45,10 @@ class SSDObjective(BaseObjective):
     @classmethod
     def supported_data_types(cls):
         return ["image"]
+    
+    def on_epoch_start(self, epoch):
+        super(SSDObjective, self).on_epoch_start(epoch)
+        self.search_space.on_epoch_start(epoch)
 
     def batch_transform(self, inputs, outputs, annotations):
         """

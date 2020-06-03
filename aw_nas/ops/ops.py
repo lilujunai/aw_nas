@@ -586,8 +586,9 @@ class FlexibleDepthWiseConv(nn.Conv2d, FlexibleLayer):
         self.do_kernel_transform = do_kernel_transform
         super(FlexibleDepthWiseConv, self).__init__(in_channels, in_channels, self.max_kernel_size, stride, dilation=dilation, groups=in_channels, bias=bias)
         if self.do_kernel_transform:
-            self.linear_7to5 = nn.Linear(5 * 5, 5 * 5)
-            self.linear_5to3 = nn.Linear(3 * 3, 3 * 3)
+            for smaller, larger in reversed(list(zip(self.kernel_sizes[:-1], self.kernel_sizes[1:]))):
+                if self.max_kernel_size >= larger:
+                    self.__setattr__(f"linear_{larger}to{smaller}", nn.Linear(smaller * smaller, smaller * smaller, bias=False))
 
         FlexibleLayer.__init__(self)
         self._bias = bias
