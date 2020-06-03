@@ -58,7 +58,7 @@ def generate_headers(num_classes, feature_channels, expansions=[0.2, 0.25, 0.5, 
 class SSDHeadFinalModel(FinalModel):
     NAME = "ssd_head_final_model"
 
-    def __new__(self, device, num_classes, 
+    def __new__(cls, device, num_classes, 
                  feature_channels,
                  expansions,
                  channels,
@@ -66,15 +66,10 @@ class SSDHeadFinalModel(FinalModel):
                  pretrained_path=None,
                  schedule_cfg=None):
         extras, regression_headers, classification_headers = generate_headers(num_classes, feature_channels, expansions, channels, aspect_ratios, device=device)
-        self.device = device
-        self.num_classes = num_classes
-
-        self.extras = extras
-        self.regression_headers = regression_headers
-        self.classification_headers = classification_headers
+        norm = ops.L2Norm(feature_channels[0], 20)
         expect(None not in [extras, regression_headers, classification_headers], 'Extras, regression_headers and classification_headers must be provided, got None instead.', ConfigException)
         head = HeadModel(device, num_classes=num_classes,
-                                            extras=extras, regression_headers=regression_headers, classification_headers=classification_headers)
+                                            extras=extras, regression_headers=regression_headers, classification_headers=classification_headers, norm=norm)
         if pretrained_path:
             head.load_state_dict(torch.load(pretrained_path, "cpu"), strict=False)
         return head
@@ -110,7 +105,6 @@ class SSDFinalModel(FinalModel):
             self._load_base_net(backbone_state_dict_path)
 
         feature_channels = self.backbone.get_feature_channel_num(feature_levels)
-        self.norm = ops.L2Norm(feature_channels[0], 20)
         self.head = SSDHeadFinalModel(device, num_classes, feature_channels, **head_cfg)
 
         self.search_space = search_space
@@ -158,10 +152,7 @@ class SSDFinalModel(FinalModel):
     def supported_data_types(cls):
         return ["image"]
 
-    def forward(self, inputs): #pylint: disable=arguments-differ
-        # features, output = self.final_model.get_det_features(inputs, self.feature_stages)
+    def forward(self, inputs):
         features, feature = self.backbone.get_features(inputs, [4, 5])
-        features[0] = self.norm(features[0])
         confidences, locations = self.head(features, feature)
-
         return confidences, locations

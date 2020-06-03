@@ -142,7 +142,7 @@ def generate_headers_bifpn(num_classes, in_channels, bifpn_out_channels, attenti
 class EfficientDetHeadFinalModel(FinalModel):
     NAME = "efficientdet_head_final_model"
 
-    def __new__(self, device, num_classes, 
+    def __new__(cls, device, num_classes, 
                  feature_channels,
                  channels,
                  attention,
@@ -151,12 +151,7 @@ class EfficientDetHeadFinalModel(FinalModel):
                  pretrained_path=None,
                  schedule_cfg=None):
         extras, regression_headers, classification_headers = generate_headers_bifpn(num_classes, feature_channels, channels, attention, repeat, num_layers, device=device)
-        self.device = device
-        self.num_classes = num_classes
 
-        self.extras = extras
-        self.regression_headers = regression_headers
-        self.classification_headers = classification_headers
         expect(None not in [extras, regression_headers, classification_headers], 'Extras, regression_headers and classification_headers must be provided, got None instead.', ConfigException)
         head = EfficientDetHeadModel(device, num_classes=num_classes,
                                             extras=extras, regression_headers=regression_headers, classification_headers=classification_headers)

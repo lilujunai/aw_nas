@@ -6,6 +6,8 @@ import torch
 
 from torch import nn
 
+from aw_nas.ops import ops
+
 from aw_nas.utils import weights_init, nms
 from aw_nas.utils import box_utils
 
@@ -14,7 +16,7 @@ from aw_nas.utils.exception import ConfigException, expect
 
 class HeadModel(nn.Module):
     
-    def __init__(self, device, num_classes=10, extras=None, regression_headers=None, classification_headers=None):
+    def __init__(self, device, num_classes=10, extras=None, regression_headers=None, classification_headers=None, norm=None):
         super(HeadModel, self).__init__()
         self.device = device
         self.num_classes = num_classes
@@ -22,12 +24,16 @@ class HeadModel(nn.Module):
         self.extras = extras
         self.regression_headers = regression_headers
         self.classification_headers = classification_headers
+        if norm:
+            self.norm = norm
         expect(None not in [extras, regression_headers, classification_headers], 'Extras, regression_headers and classification_headers must be provided, got None instead.', ConfigException)
 
         self._init_weights()
 
     def forward(self, features):
         expect(isinstance(features, (list, tuple)), 'features must be a series of feature.', ValueError)
+        if self.norm:
+            features[0] = self.norm(features[0])
         x = features[-1]
         for extra in self.extras:
             x = extra(x)
@@ -49,8 +55,8 @@ class HeadModel(nn.Module):
         self.regression_headers.apply(weights_init)
         self.classification_headers.apply(weights_init)
 
+
 class EfficientDetHeadModel(nn.Module):
-    
     def __init__(self, device, num_classes=10, extras=None, regression_headers=None, classification_headers=None):
         super(EfficientDetHeadModel, self).__init__()
         self.device = device

@@ -400,6 +400,7 @@ class MobileNetV2Arch(BaseBackboneArch):
 
         if self.pretrained_path:
             state_dict = torch.load(self.pretrained_path, "cpu")
+            self.logger.info(f"loading pretrained model from path {self.pretrained_path}...")
             self.logger.info(self.load_state_dict(state_dict, strict=False))
 
         self.to(self.device)
