@@ -116,7 +116,7 @@ objective_type: ssd_detection
 objective_cfg:
   # Schedulable attributes:
   num_classes: 91
-  nms_threshold: 0.5
+  nms_threshold: 0.3
   clip: true
   aspect_ratios: [[2, 3], [2, 3], [2, 3], [2, 3], [2], [2]]
 #   latency_file: latency_block.txt
