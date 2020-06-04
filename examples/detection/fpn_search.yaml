@@ -9,15 +9,15 @@ search_space_cfg:
   schedule_cfg:
     kernel_choice:
         type: value
-        boundary: [1, 100, 160]
-        value: [[7], [7, 5], [7, 5, 3]]
+        boundary: [1, 60]
+        value: [[7, 5], [7, 5, 3]]
     width_choice:
       type: value
-      boundary: [1, 220, 280]
+      boundary: [1, 120, 180]
       value: [[6], [6,5,4], [6,5,4,3,2]]
     depth_choice:
       type: value
-      boundary: [1, 340, 400]
+      boundary: [1, 240, 300]
       value: [[4], [4, 3], [4,3,2]]
 # ---- End Type mnsanet_ofa ----
 ## ---- End Component search_space ----
@@ -50,26 +50,26 @@ evaluator_cfg:
   load_optimizer: false
   load_scheduler: false
   rollout_type: ofa
-  batch_size: 10
+  batch_size: 14
   controller_surrogate_steps: 0
   # derive_surrogate_steps: 0
   mepa_surrogate_steps: 0
   mepa_optimizer:
-    lr: 0.0001
-    momentum: 0.97
+    lr: 0.001
+    momentum: 0.9
     type: SGD
     weight_decay: 0.0001
   mepa_scheduler:
     eta_min: 0.0
-    T_max: 500
+    T_max: 60
     type: CosineAnnealingLR
   surrogate_optimizer: null
   surrogate_scheduler: null
   mepa_samples: 1
   data_portion:
   - 0.0
-  - 0.95 # train evaluator weights
-  - 0.05 # for train controller
+  - 1. # train evaluator weights
+  - 0. # for train controller
   schedule_every_batch: true
   mepa_as_surrogate: false
   bptt_steps: 35
@@ -93,7 +93,7 @@ weights_manager_cfg:
       strides: [1, 2, 2, 2, 1, 2]
       expansions: [1, 6, 6, 6, 6, 6]
       acts: ["relu", "relu", "relu", "h_swish", "h_swish", "h_swish"]
-      channels: [16, 16, 24, 40, 80, 112, 160, 960, 1280]
+      layer_channels: [16, 16, 24, 40, 80, 112, 160, 960, 1280]
       mult_ratio: 1.
       kernel_sizes: [3, 5, 7]
       num_classes: 90
@@ -132,7 +132,7 @@ trainer_cfg:
   # Schedulable attributes: controller_samples, derive_samples
   rollout_type: ofa
   epochs: 500
-  test_every: 50
+  test_every: 1000
   controller_scheduler: null
   controller_samples: 1
   derive_samples: 1
