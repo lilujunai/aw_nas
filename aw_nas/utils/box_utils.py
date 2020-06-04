@@ -308,8 +308,8 @@ class BBoxTransform(nn.Module):
         w = regression[..., 3].exp() * wa
         h = regression[..., 2].exp() * ha
 
-        x_centers = regression[..., 1] * ha + y_centers_a
-        y_centers = regression[..., 0] * wa + x_centers_a
+        y_centers = regression[..., 0] * ha + y_centers_a
+        x_centers = regression[..., 1] * wa + x_centers_a
 
         ymin = y_centers - h / 2.
         xmin = x_centers - w / 2.
