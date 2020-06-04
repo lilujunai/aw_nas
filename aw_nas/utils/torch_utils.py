@@ -517,7 +517,7 @@ def prepare_data_queues(splits, queue_cfg_lst, data_type="image", drop_last=Fals
         callback = cfg.get("callback", None)
 
         if portion == 0:
-            queues.append(None)
+            queues.append([])
             continue
 
         used_portion = used_portions[split]
@@ -533,7 +533,7 @@ def prepare_data_queues(splits, queue_cfg_lst, data_type="image", drop_last=Fals
                 "sampler": torch.utils.data.SubsetRandomSampler(subset_indices) \
                         if not multiprocess else CustomDistributedSampler(split, subset_indices),
                 "drop_last": drop_last,
-                "timeout": 10,
+                "timeout": 0,
             }
             kwargs.update(d_kwargs)
             queue = get_inf_iterator(torch.utils.data.DataLoader(

@@ -483,6 +483,9 @@ class MepaEvaluator(BaseEvaluator): #pylint: disable=too-many-instance-attribute
         else:
             eval_rollouts = rollouts
 
+        if not self.controller_queue or len(self.controller_queue) == 0:
+            return rollouts
+
         if is_training: # the returned reward will be used for training controller
             # get one data batch from controller queue
             cont_data = next(self.controller_queue)
@@ -590,7 +593,7 @@ class MepaEvaluator(BaseEvaluator): #pylint: disable=too-many-instance-attribute
 
         if self.use_same_surrogate_data:
             surrogate_data_list = [next(self.surrogate_queue) for _ in range(num_surrogate_step)]
-        holdout_data = next(self.controller_queue) if self.report_cont_data_diagnostics else None
+        holdout_data = next(self.controller_queue) if self.report_cont_data_diagnostics and self.controller_queue else None
 
         for _ in range(self.mepa_samples):
             # surrogate data iterator

@@ -347,11 +347,11 @@ class SimpleTrainer(BaseTrainer):
         """
         rollouts = self.derive(n=self.derive_samples)
 
-        rewards = [r.get_perf("reward") for r in rollouts]
+        rewards = [r.get_perf("reward") or 0. for r in rollouts]
         mean_rew = np.mean(rewards)
         idx = np.argmax(rewards)
         # other_perfs = {n: [r.perf[n] for r in rollouts] for n in rollouts[0].perf}
-        other_perfs = {n: [r.perf.get(n, None) for r in rollouts] for n in rollouts[0].perf}
+        other_perfs = {n: [r.perf.get(n, 0.) for r in rollouts] for n in rollouts[0].perf}
 
         save_path = self._save_path("rollout/cell")
         if save_path is not None:
