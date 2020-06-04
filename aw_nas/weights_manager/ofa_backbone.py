@@ -350,6 +350,7 @@ class MobileNetV2Arch(BaseBackboneArch):
             kernel_sizes,
             do_kernel_transform,
             num_classes,
+            block_type,
             pretrained_path,
             schedule_cfg,
         )
@@ -515,6 +516,7 @@ class MobileNetV3Arch(BaseBackboneArch):
             kernel_sizes,
             do_kernel_transform,
             num_classes,
+            block_type,
             pretrained_path,
             schedule_cfg,
         )
