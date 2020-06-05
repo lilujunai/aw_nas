@@ -716,3 +716,15 @@ class CustomDistributedSampler(DistributedSampler):
         assert len(indices) == self.num_samples
 
         return iter(indices)
+
+def drop_connect(inputs, p, training):
+    """ Drop connect. """
+    if not training: 
+        return inputs
+    batch_size = inputs.shape[0]
+    keep_prob = 1 - p
+    random_tensor = keep_prob
+    random_tensor += torch.rand([batch_size, 1, 1, 1], dtype=inputs.dtype, device=inputs.device)
+    binary_tensor = torch.floor(random_tensor)
+    output = inputs / keep_prob * binary_tensor
+    return output

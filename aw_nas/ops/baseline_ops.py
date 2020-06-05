@@ -2,7 +2,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from aw_nas.ops import register_primitive, ConvBNReLU, Identity, SEModule, get_op
-from aw_nas.utils import make_divisible
+from aw_nas.utils import make_divisible, drop_connect
 class VggBlock(nn.Module):
     def __init__(self, C, C_out, stride, affine):
         super(VggBlock, self).__init__()
@@ -333,12 +333,13 @@ class MobileNetV2Block(nn.Module):
                     nn.BatchNorm2d(C_out),
                 )
 
-    def forward(self, inputs):
+    def forward(self, inputs, drop_connect_rate=0.):
         out = inputs
         if self.inv_bottleneck:
             out = self.inv_bottleneck(out)
         out = self.depth_wise(out)
         out = self.point_linear(out)
+        out = drop_connect(out, p=drop_connect_rate, training=self.training)
         if self.stride == 1:
             out = out + self.shortcut(inputs)
         return out
@@ -393,7 +394,7 @@ class MobileNetV3Block(nn.Module):
         if stride == 1 and C == C_out:
             self.shortcut = nn.Sequential()
 
-    def forward(self, inputs):
+    def forward(self, inputs, drop_connect_rate=0.0):
         out = inputs
         if self.inv_bottleneck:
             out = self.inv_bottleneck(out)
@@ -401,6 +402,7 @@ class MobileNetV3Block(nn.Module):
         if self.se:
             out = self.se(out)
         out = self.point_linear(out)
+        out = drop_connect(out, p=drop_connect_rate, training=self.training)
         if self.shortcut is not None:
             out = out + self.shortcut(inputs)
         return out

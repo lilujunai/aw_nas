@@ -232,9 +232,9 @@ class FlexibleMobileNetV3Block(MobileNetV3Block, FlexibleBlock):
         if self.se:
             self.se.set_mask(mask)
 
-    def forward_rollout(self, inputs, expansion, kernel_size):
+    def forward_rollout(self, inputs, expansion, kernel_size, drop_connect_rate=0.0):
         self.set_mask(expansion, kernel_size)
-        out = self.forward(inputs)
+        out = self.forward(inputs, drop_connect_rate)
         self.reset_mask()
         return out
 
@@ -662,15 +662,16 @@ class MobileNetV3Arch(BaseBackboneArch):
         out = self.stem(inputs)
         level_indexes = feature_level_to_stage_index(self.strides)
         features = []
+        drop_connect_rate = 0.2
         for i, cell in enumerate(self.cells):
             for j, block in enumerate(cell):
                 if rollout is None:
-                    out = block(out)
+                    out = block(out, drop_connect_rate)
                 else:
                     if j >= rollout.depth[i]:
                         break
                     out = block.forward_rollout(
-                        out, rollout.width[i][j], rollout.kernel[i][j]
+                        out, rollout.width[i][j], rollout.kernel[i][j], drop_connect_rate
                     )
             features.append(out)
         out = self.conv_head(out)
