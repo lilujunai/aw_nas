@@ -220,7 +220,6 @@ class PredictModel(nn.Module):
         # anchor is not normalized
         anchors, ctr_anchors = self.anchors(img_shape, confidences.device)
         
-        confidences = confidences.sigmoid()
         num = confidences.shape[0]
         scores = torch.max(confidences, dim=2, keepdim=True)[0]
         scores_over_thresh = (scores > self.confidence_thresh)[:, :, 0]
