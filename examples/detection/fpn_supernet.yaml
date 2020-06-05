@@ -25,7 +25,8 @@ dataset_cfg:
   load_train_only: false
   random_choose: false
   random_seed: 123
-  train_crop_size: 300
+  train_crop_size: 512
+  test_crop_size: 512
 # ---- End Type cifar10 ----
 ## ---- End Component dataset ----
 
@@ -135,18 +136,18 @@ final_model_cfg:
 
 final_trainer_type: det_final_trainer
 final_trainer_cfg:
-  batch_size: 48
-  epochs: 300
+  batch_size: 14
+  epochs: 50
   optimizer_scheduler:
-    eta_min: 0.01
-    T_max: 30
+    eta_min: 0.0
+    T_max: 50
     type: CosineAnnealingLR
   schedule_cfg: null
-  weight_decay: 0.00004
-  learning_rate: 0.0001
+  weight_decay: 0.0001
+  learning_rate: 0.00001
   momentum: 0.9
   freeze_base_net: false
-  base_net_lr: 0.0001
+  base_net_lr: 0.00001
   save_as_state_dict: true
-  multiprocess: false 
+  multiprocess: true
   eval_every: 20
