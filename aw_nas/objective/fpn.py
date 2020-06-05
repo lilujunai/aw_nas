@@ -27,7 +27,7 @@ class FPNObjective(BaseObjective):
                  scales=[2 ** 0, 2 ** (1.0 / 3.0), 2 ** (2.0 / 3.0)],
                  ratios=[(1.0, 1.0), (1.4, 0.7), (0.7, 1.4)],
                  confidence_thresh=0.05,
-                 nms_threshold=0.3, schedule_cfg=None):
+                 nms_threshold=0.5, schedule_cfg=None):
         super(FPNObjective, self).__init__(search_space, schedule_cfg)
         self.num_classes = num_classes
 
@@ -111,8 +111,8 @@ class FPNObjective(BaseObjective):
                 dets = detections[batch_id][j]
                 if len(dets) == 0:
                     continue
-                dets[:, 0::2] *= w
-                dets[:, 1::2] *= h
+                dets[:, [0, 2]] *= w
+                dets[:, [1, 3]] *= h
                 self.all_boxes[j + 1][_id] = dets.cpu().detach().numpy()
         return 0.
 
@@ -198,7 +198,6 @@ class TargetTransform(nn.Module):
             targets_dh = torch.log(gt_heights / anchor_heights_pi)
 
             loc_t = torch.stack((targets_dy, targets_dx, targets_dh, targets_dw)).t()
-            # loc_t = torch.stack((targets_dx, targets_dy, targets_dw, targets_dh)).t()
         else:
             loc_t = torch.tensor([])
 
@@ -533,7 +532,6 @@ class FocalLoss(nn.Module):
                 targets_dh = torch.log(gt_heights / anchor_heights_pi)
 
                 targets = torch.stack((targets_dy, targets_dx, targets_dh, targets_dw))
-                # targets = torch.stack((targets_dx, targets_dy, targets_dw, targets_dh))
                 targets = targets.t()
 
                 regression_diff = torch.abs(targets - regression[positive_indices, :])
