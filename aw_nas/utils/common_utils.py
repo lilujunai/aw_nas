@@ -136,7 +136,7 @@ def makedir(path, remove=False):
     if os.path.exists(path) and remove:
         shutil.rmtree(path)
     if not os.path.isdir(path):
-        os.makedirs(path)
+        os.makedirs(path, exist_ok=True)
     return path
 
 def get_awnas_dir(env, name):
