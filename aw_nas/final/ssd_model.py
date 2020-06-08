@@ -37,7 +37,7 @@ def SeperableConv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=
         nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=1),
     )
 
-def generate_headers(num_classes, feature_channels, expansions=[0.2, 0.25, 0.5, 0.25], channels=[1280, 512, 256, 256, 64], aspect_ratios=[[2], [2, 3], [2, 3], [2, 3], [2], [2]], device=None, **kwargs):
+def generate_headers(num_classes, feature_channels, expansions=[0.2, 0.25, 0.5, 0.25], channels=[512, 256, 256, 64], aspect_ratios=[[2], [2, 3], [2, 3], [2, 3], [2], [2]], device=None, **kwargs):
     channels = feature_channels + channels
     multi_ratio = [len(r) * 2 + 2 for r in aspect_ratios]
     extras = nn.ModuleList([
@@ -154,5 +154,5 @@ class SSDFinalModel(FinalModel):
 
     def forward(self, inputs):
         features, feature = self.backbone.get_features(inputs, [4, 5])
-        confidences, locations = self.head(features, feature)
+        confidences, locations = self.head(features)
         return confidences, locations
