@@ -464,19 +464,19 @@ class MobileNetV2Arch(BaseBackboneArch):
         self.cells = nn.ModuleList(cells)
         return self
 
-    def get_features(self, inputs, p_levels, rollout=None):
+    def get_features(self, inputs, p_levels, rollout=None, drop_connect_rate=0.0):
         out = self.stem(inputs)
         level_indexes = feature_level_to_stage_index(self.strides)
         features = []
         for i, cell in enumerate(self.cells):
             for j, block in enumerate(cell):
                 if rollout is None:
-                    out = block(out)
+                    out = block(out, drop_connect_rate)
                 else:
                     if j >= rollout.depth[i]:
                         break
                     out = block.forward_rollout(
-                        out, rollout.width[i][j], rollout.kernel[i][j]
+                        out, rollout.width[i][j], rollout.kernel[i][j], drop_connect_rate
                     )
             features.append(out)
         out = self.conv_head(out)
@@ -658,11 +658,10 @@ class MobileNetV3Arch(BaseBackboneArch):
         self.cells = nn.ModuleList(cells)
         return self
 
-    def get_features(self, inputs, p_levels, rollout=None):
+    def get_features(self, inputs, p_levels, rollout=None, drop_connect_rate=0.0):
         out = self.stem(inputs)
         level_indexes = feature_level_to_stage_index(self.strides)
         features = []
-        drop_connect_rate = 0.2
         for i, cell in enumerate(self.cells):
             for j, block in enumerate(cell):
                 if rollout is None:

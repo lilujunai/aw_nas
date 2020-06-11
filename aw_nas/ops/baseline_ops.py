@@ -339,8 +339,9 @@ class MobileNetV2Block(nn.Module):
             out = self.inv_bottleneck(out)
         out = self.depth_wise(out)
         out = self.point_linear(out)
-        out = drop_connect(out, p=drop_connect_rate, training=self.training)
         if self.stride == 1:
+            if drop_connect_rate > 0:
+                out = drop_connect(out, p=drop_connect_rate, training=self.training)
             out = out + self.shortcut(inputs)
         return out
 
@@ -402,8 +403,9 @@ class MobileNetV3Block(nn.Module):
         if self.se:
             out = self.se(out)
         out = self.point_linear(out)
-        out = drop_connect(out, p=drop_connect_rate, training=self.training)
         if self.shortcut is not None:
+            if drop_connect_rate > 0:
+                out = drop_connect(out, p=drop_connect_rate, training=self.training)
             out = out + self.shortcut(inputs)
         return out
 
