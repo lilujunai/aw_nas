@@ -124,6 +124,7 @@ final_model_cfg:
       strides: [1, 2, 2, 2, 1, 2]
       mult_ratio: 1.
       kernel_sizes: [3, 5, 7]
+      num_classes: 90
   backbone_state_dict_path: null
   head_type: efficientdet_head_final_model
   head_cfg:

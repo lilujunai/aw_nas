@@ -9,16 +9,16 @@ search_space_cfg:
   schedule_cfg:
     kernel_choice:
         type: value
-        boundary: [1, 60]
+        boundary: [1, 51]
         value: [[7, 5], [7, 5, 3]]
     width_choice:
       type: value
-      boundary: [1, 120, 180]
-      value: [[6], [6,5,4], [6,5,4,3,2]]
+      boundary: [1, 101, 151]
+      value: [[6], [6, 4], [6, 4, 3]]
     depth_choice:
       type: value
-      boundary: [1, 240, 300]
-      value: [[4], [4, 3], [4,3,2]]
+      boundary: [1, 201, 301]
+      value: [[4], [4, 3], [4, 3, 2]]
 # ---- End Type mnsanet_ofa ----
 ## ---- End Component search_space ----
 
@@ -61,7 +61,7 @@ evaluator_cfg:
     weight_decay: 0.0001
   mepa_scheduler:
     eta_min: 0.0
-    T_max: 60
+    T_max: 50
     type: CosineAnnealingLR
   surrogate_optimizer: null
   surrogate_scheduler: null
