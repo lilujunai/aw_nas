@@ -23,14 +23,6 @@ class TrainAugmentation:
             boxes: boundding boxes in the form of (x1, y1, x2, y2).
             labels: labels of boxes.
         """
-        boxes = boxes.astype(np.float)
-        widths = boxes[:, 2] - boxes[:, 0]
-        heights = boxes[:, 3] - boxes[:, 1]
-        if widths.min() == 0 or heights.min() == 0:
-           #print(boxes)
-           idx = np.logical_and(widths > 0, heights > 0)
-           boxes = boxes[idx]
-           labels = labels[idx]
         return self.preproc(img, boxes, labels)
 
 
@@ -52,6 +44,16 @@ class TargetTransform(object):
         num_priors = priors.size(0)
         loc_t = torch.Tensor(1, num_priors, 4)
         conf_t = torch.LongTensor(1, num_priors)
+        boxes = boxes.astype(np.float)
+        widths = boxes[:, 2] - boxes[:, 0]
+        heights = boxes[:, 3] - boxes[:, 1]
+        if widths.min() == 0 or heights.min() == 0:
+            idx = (widths > 0).__and__(heights > 0)
+            boxes = boxes[idx]
+            labels = labels[idx]
+        if len(boxes) == 0:
+            conf_t[0, :] = 0
+            return conf_t.squeeze(0), loc_t.squeeze(0)
         match(self.threshold, torch.tensor(boxes).float(), priors, self.variance, torch.tensor(labels),
                 loc_t, conf_t, 0)
         loc_t = loc_t.squeeze(0)

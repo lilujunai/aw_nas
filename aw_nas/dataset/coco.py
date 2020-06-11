@@ -63,7 +63,7 @@ class COCODetection(data.Dataset):
     """
 
     def __init__(self, root, image_sets, transform=None, target_transform=None, is_test=False, max_images=None,
-                 dataset_name="COCO"):
+                 remove_no_anno=False, dataset_name="COCO"):
         self.root = root
         self.cache_path = os.path.join(self.root, "cache")
         self.image_set = image_sets
@@ -97,16 +97,19 @@ class COCODetection(data.Dataset):
             self._class_to_ind = dict(zip(self._classes, range(self.num_classes)))
             self._class_to_coco_cat_id = dict(zip([c["name"] for c in cats],
                                                   _COCO.getCatIds()))
-            indexes = _COCO.getImgIds()[:max_images]
+            indexes = _COCO.getImgIds()
             
             if image_set.find("test") != -1:
                 print("test set will not load annotations!")
             else:
-                annos, indexes = self._load_coco_annotations(coco_name, indexes, _COCO, remove_no_anno=True)
+                annos, indexes = self._load_coco_annotations(coco_name, indexes, _COCO, remove_no_anno=remove_no_anno)
                 self.annotations.extend(annos)
             
             self.image_indexes.extend(indexes)
             self.img_paths.extend(self._load_coco_img_path(coco_name, indexes))
+        
+        self.image_indexes = self.image_indexes[:max_images]
+        self.img_paths = self.img_paths[:max_images]
 
 
         def collate_fn(batch):
@@ -395,7 +398,7 @@ class COCODetection(data.Dataset):
         self._write_coco_results_file(all_boxes, res_file)
         # Only do evaluation on non-test sets
         if self.coco_name.find("test") == -1:
-            return self._do_detection_eval(res_file, output_dir, eval_ids)
+            return self._do_detection_eval(res_file, output_dir, eval_ids or self.image_indexes)
         # Optionally cleanup results json file
 
 
@@ -407,7 +410,7 @@ class COCODataset(BaseDataset):
                  train_sets=[("2017", "train")],
                  test_sets=[("2017", "val")],
                  train_crop_size=300, test_crop_size=300, image_mean=[0.485, 0.456, 0.406], image_std=[0.229, 0.224, 0.225],
-                 iou_threshold=0.5, keep_difficult=False):
+                 iou_threshold=0.5, keep_difficult=False, max_images=None, remove_no_anno=False):
         super(COCODataset, self).__init__()
         self.load_train_only = load_train_only
         self.train_data_dir = self.data_dir
@@ -422,11 +425,12 @@ class COCODataset(BaseDataset):
         # test_transform = TestTransformer(image_mean, image_std, train_crop_size)
 
         self.datasets = {}
-        self.datasets["train"] = COCODetection(self.train_data_dir, train_sets, train_transform)
+        self.datasets["train"] = COCODetection(self.train_data_dir, train_sets, train_transform, remove_no_anno=remove_no_anno)
 
         if not self.load_train_only:
             self.test_data_dir = self.data_dir 
-            self.datasets["test"] = COCODetection(self.test_data_dir, test_sets, test_transform, is_test=True)
+            self.datasets["test"] = COCODetection(self.test_data_dir, test_sets, test_transform, 
+                                                  is_test=True, max_images=max_images, remove_no_anno=remove_no_anno)
 
     def splits(self):
         return self.datasets

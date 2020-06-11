@@ -210,14 +210,14 @@ class Preproc(object):
     def __call__(self, image, boxes, labels):
         # some bugs
         if self.p == -2: # abs_test
-            targets = torch.zeros((1,5))
+            targets = np.zeros((1,5))
             targets[0] = image.shape[0]
             targets[0] = image.shape[1]
             image = preproc_for_test(image, self.resize, self.means, self.std)
             return image, targets[:, :-1], targets[:, -1]
 
         if len(boxes) == 0:
-            targets = torch.zeros((1,5))
+            targets = np.zeros((1,5))
             image = preproc_for_test(image, self.resize, self.means, self.std) # some ground truth in coco do not have bounding box! weird!
             return image, targets[:, :-1], targets[:, -1]
         if self.p == -1: # eval
