@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import os
 
 from math import sqrt
 from itertools import product
@@ -112,14 +113,22 @@ class SSDObjective(BaseObjective):
                 self.all_boxes[j][_id] = cls_dets
         return [0.]
     
-    def get_perfs(self, inputs, output, target, cand_net):
-        acc = self.get_acc(inputs, output, target, cand_net)
+    def get_perfs(self, inputs, outputs, targets, cand_net):
+        acc = self.get_acc(inputs, outputs, targets, cand_net)
         if not cand_net.training:
-            self.get_mAP(inputs, output, target, cand_net)
+            self.get_mAP(inputs, outputs, targets, cand_net)
         return acc
 
-    def get_reward(self, inputs, outputs, targets, cand_net):
-        return self.get_perfs(inputs, outputs, targets, cand_net)
+    def get_reward(self, inputs, outputs, targets, cand_net, final=False):
+        if final:
+            eval_dir = os.environ['HOME']
+            pid = os.getpid()
+            eval_dir = os.path.join(eval_dir, '.det_exp', str(pid))
+            os.makedirs(eval_dir, exist_ok=True)
+            state = self.dataset.evaluate_detections(self.all_boxes, eval_dir)
+            return state[0]
+        self.get_mAP(inputs, outputs, targets, cand_net)
+        return 0.
 
     def get_loss(self, inputs, outputs, targets, cand_net,
                  add_controller_regularization=True, add_evaluator_regularization=True):

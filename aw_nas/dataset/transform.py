@@ -44,7 +44,7 @@ class TargetTransform(object):
         num_priors = priors.size(0)
         loc_t = torch.Tensor(1, num_priors, 4)
         conf_t = torch.LongTensor(1, num_priors)
-        boxes = boxes.astype(np.float)
+        boxes = boxes.to(torch.float)
         widths = boxes[:, 2] - boxes[:, 0]
         heights = boxes[:, 3] - boxes[:, 1]
         if widths.min() == 0 or heights.min() == 0:

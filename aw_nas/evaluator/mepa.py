@@ -1045,6 +1045,7 @@ class MepaEvaluator(BaseEvaluator): #pylint: disable=too-many-instance-attribute
             self._reward_func = self.objective.get_reward
             self._reward_kwargs = {}
             self._scalar_reward_func = self._reward_func
+            self.objective.dataset = self.dataset
         elif rollout_type == "differentiable":
             self._reward_func = partial(self.objective.get_loss,
                                         add_controller_regularization=True,

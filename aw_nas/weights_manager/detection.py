@@ -172,4 +172,7 @@ class DetectionBackboneCandidateNet(CandidateNet):
                     average_ans = ans
                 else:
                     average_ans = [s + a for s, a in zip(average_ans, ans)]
-        return [s / steps for s in average_ans]
+        mAP = criterions[0](None, None, None, final=True)
+        average_ans = [s / steps for s in average_ans]
+        average_ans[0] = mAP
+        return average_ans
