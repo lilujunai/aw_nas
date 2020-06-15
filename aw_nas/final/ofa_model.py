@@ -5,6 +5,8 @@ A cell-based model whose architecture is described by a genotype.
 
 from __future__ import print_function
 
+import re
+
 import torch
 from torch import nn
 
@@ -18,25 +20,23 @@ class OFAGenotypeModel(FinalModel):
     def __init__(self, search_space, device, genotypes,
                  backbone_type="mbv2_backbone",
                  backbone_cfg=None,
-                 ofa_state_dict=None,
+                 supernet_state_dict=None,
                  num_classes=10,
+                 filter_regex=None,
                  schedule_cfg=None):
         super(OFAGenotypeModel, self).__init__(schedule_cfg)
 
         self.search_space = search_space
         self.device = device
         self.ofa_state_dict = ofa_state_dict
-        assert isinstance(genotypes, str)
-        self.genotypes = list(genotype_from_str(genotypes, self.search_space)._asdict().values())
-
         self.num_classes = num_classes
         self.backbone_cfg = backbone_cfg or {}
-
-        self.depth, self.width, self.kernel = self.parse(self.genotypes)
         self.backbone_type = backbone_type
         self.backbone_cfg = backbone_cfg
-        self.backbone = self.load_geno_state_dict(
-            ofa_state_dict, self.depth, self.width, self.kernel)
+        
+        self.backbone = self.load_supernet_state_dict(supernet_state_dict, filter_regex)
+        if genotypes:
+            self.finalize(supernet_state_dict, genotypes)
 
         self.to(self.device)
 
@@ -52,8 +52,8 @@ class OFAGenotypeModel(FinalModel):
             self._flops_calculated = True
         return res
 
-    def get_features(self, inputs, p_levels=(4, 5)):
-        return self.backbone.get_features(inputs, p_levels)
+    def get_features(self, inputs, p_levels=(4, 5), drop_connect_rate=0.0):
+        return self.backbone.get_features(inputs, p_levels, drop_connect_rate=drop_connect_rate)
     
     def get_feature_channel_num(self, p_level):
         return self.backbone.get_feature_channel_num(p_level)
@@ -66,27 +66,31 @@ class OFAGenotypeModel(FinalModel):
             else:
                 return self.backbone.load_state_dict(model, strict)
 
-    def load_ofa_state_dict(self, ofa_state_dict, strict=True):
+    def load_supernet_state_dict(self, supernet_state_dict, filter_regex=None):
         """
-        ofa_state_dict includes all params and weights of FlexibileArch
+        supernet_state_dict includes all params and weights of FlexibileArch
         """
         flexible_backbone = BaseBackboneArch.get_class_(self.backbone_type)(
             device=self.device, **self.backbone_cfg)
         if ofa_state_dict is not None:
-            state_dict = torch.load(ofa_state_dict, map_location="cpu")
-            new_state_dict = {}
-            for k, v in state_dict.items():
-                if ".flex_bn." in k:
-                    k = k.replace(".flex_bn.", ".")
-                new_state_dict[k] = v
+            if isinstance(ofa_state_dict, dict):
+                state_dict = supernet_state_dict
+            else:
+                state_dict = torch.load(supernet_state_dict, map_location="cpu")
             state_dict = state_dict.get("weights_manager", state_dict)
-            flexible_backbone.load_state_dict(state_dict, strict=strict)
+            if filter_regex is not None:
+                regex = re.compile(filter_regex)
+                state_dict = {k: v for k, v in state_dict.items() if not regex.match(k)}
+            flexible_backbone.load_state_dict(state_dict, strict=filter_regex is None)
         return flexible_backbone
 
-    def load_geno_state_dict(self, ofa_state_dict, depth, width, kernel, strict=True):
-        flexible_backbone = self.load_ofa_state_dict(ofa_state_dict, strict)
-        backbone = flexible_backbone.finalize(depth, width, kernel)
-        return backbone
+    def finalize(self, genotypes, filter_regex=None):
+        assert isinstance(genotypes, str)
+        genotypes = list(genotype_from_str(genotypes, self.search_space)._asdict().values())
+        depth, width, kernel = self.parse(genotypes)
+
+        self.backbone = self.backbone.finalize(depth, width, kernel)
+        return self
 
     def set_hook(self):
         for _, module in self.named_modules():

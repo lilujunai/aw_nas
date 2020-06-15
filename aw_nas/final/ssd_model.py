@@ -88,7 +88,8 @@ class SSDFinalModel(FinalModel):
                  backbone_type,
                  backbone_cfg,
                  feature_levels=[4, 5],
-                 backbone_state_dict_path=None,
+                 supernet_state_dict_path=None,
+                 #backbone_state_dict_path=None,
                  head_type='ssd_head_final_model',
                  head_cfg={},
                  num_classes=10,
@@ -100,12 +101,15 @@ class SSDFinalModel(FinalModel):
         self.num_classes = num_classes
         self.feature_levels = feature_levels
 
-        self.backbone = RegistryMeta.get_class('final_model', backbone_type)(search_space, device, num_classes=num_classes, schedule_cfg=schedule_cfg, **backbone_cfg)
-        if backbone_state_dict_path:
-            self._load_base_net(backbone_state_dict_path)
+        genoptypes = backbone_cfg.pop("genotypes")
+        self.backbone = RegistryMeta.get_class('final_model', backbone_type)(search_space, device, num_classes=num_classes, **backbone_cfg)
 
         feature_channels = self.backbone.get_feature_channel_num(feature_levels)
         self.head = SSDHeadFinalModel(device, num_classes, feature_channels, **head_cfg)
+
+        if supernet_state_dict_path:
+            self.load_supernet_state_dict(supernet_state_dict_path)
+        self.finalize(genotypes)
 
         self.search_space = search_space
         self.device = device
@@ -118,21 +122,18 @@ class SSDFinalModel(FinalModel):
         self._flops_calculated = False
         self.set_hook()
 
+    def finalize(self, genotypes): 
+        self.backbone.finalize(*args, **kwargs)
+        return self
 
-    def _load_base_net(self, backbone_state_dict_path):
-        state_model = torch.load(backbone_state_dict_path, map_location=torch.device('cpu'))
-        if 'classifier.weight' in state_model:
-            del state_model['classifier.weight']
-        if 'classifier.bias' in state_model:
-            del state_model['classifier.bias']
-        res = self.backbone.backbone.load_state_dict(state_model, strict=False)
-        print('load base_net weight successfully.', res)
-
-    def _load_head(self, head_state_dict_path):
-        state_model = torch.load(head_state_dict_path, map_location=torch.device('cpu'))
-        res = self.head.load_state_dict(state_model, strict=True)
-        print('load head_net weight successfully.', res)
-
+    def load_supernet_state_dict(self, supernet_state_dict, strict=True):
+        model_state = torch.load(supernet_state_dict, "cpu")
+        backbone_state = {k[9:]: v for k, v in model_state.items() if k.startswith("backbone")}
+        head_state = {k[5:]: v for k, v in model_state.items() if k.startswith("head")}
+        self.backbone.load_supernet_state_dict(backbone_state, filter_regex=r"*classifier*")
+        self.head.load_state_dict(head_state, strict=strict)
+        return self.backbone, self.head
+        
     def set_hook(self):
         for name, module in self.named_modules():
             module.register_forward_hook(self._hook_intermediate_feature)
