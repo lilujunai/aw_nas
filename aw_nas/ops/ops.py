@@ -542,12 +542,17 @@ class FlexiblePointLinear(nn.Conv2d, FlexibleLayer):
 
     def _select_params(self, in_mask=None, out_mask=None):
         if in_mask is None and out_mask is None:
-            return self.weight
-        if in_mask is None:
-            return self.weight[out_mask, :, :, :].contiguous()
+            return self.weight, self.bias
         if out_mask is None:
-            return self.weight[:, in_mask, :, :].contiguous()
-        return self.weight[:, in_mask, :, :][out_mask, :, :, :].contiguous()
+            return self.weight[:, in_mask, :, :].contiguous(), self.bias
+
+        bias = None
+        if self._bias:
+            bias = self.bias[out_mask].contiguous()
+            
+        if in_mask is None:
+            return self.weight[out_mask, :, :, :].contiguous(), bias
+        return self.weight[:, in_mask, :, :][out_mask, :, :, :].contiguous(), bias
 
     def set_mask(self, in_mask, out_mask):
         self.in_mask = in_mask
@@ -558,9 +563,9 @@ class FlexiblePointLinear(nn.Conv2d, FlexibleLayer):
         self.out_mask = None
 
     def forward_mask(self, inputs, in_mask=None, out_mask=None):
-        filters = self._select_params(in_mask, out_mask)
+        filters, bias = self._select_params(in_mask, out_mask)
         padding = max(self.kernel_size) // 2
-        return F.conv2d(inputs, filters, padding=padding, stride=self.stride, dilation=self.dilation)
+        return F.conv2d(inputs, filters, bias=bias, padding=padding, stride=self.stride, dilation=self.dilation)
 
     def forward(self, inputs):
         return self.forward_mask(inputs, self.in_mask, self.out_mask)
@@ -569,12 +574,14 @@ class FlexiblePointLinear(nn.Conv2d, FlexibleLayer):
         """
         The method should be called only after set_mask is called, or there will be no effect.
         """
-        weight = self._select_params(self.in_mask, self.out_mask)
+        weight, bias = self._select_params(self.in_mask, self.out_mask)
         C_out, C_in, H, W = weight.shape
         assert H == W
         padding = H // 2
         final_conv = nn.Conv2d(C_in, C_out, H, stride=self.stride, padding=padding, bias=self._bias)
         final_conv.weight.data.copy_(weight)
+        if self._bias:
+            final_conv.bias.data.copy_(bias)
         return final_conv
 
 class FlexibleDepthWiseConv(nn.Conv2d, FlexibleLayer):
@@ -637,7 +644,7 @@ class FlexibleDepthWiseConv(nn.Conv2d, FlexibleLayer):
         filters = self._select_params(mask, kernel_size)
         padding = filters.shape[-1] // 2
         groups = filters.shape[0]
-        return F.conv2d(inputs, filters, padding=padding, stride=self.stride, dilation=self.dilation, groups=groups)
+        return F.conv2d(inputs, filters, bias=self.bias, padding=padding, stride=self.stride, dilation=self.dilation, groups=groups)
 
     def forward(self, inputs):
         return self.forward_mask(inputs, self.mask, self._kernel_size)
@@ -651,6 +658,8 @@ class FlexibleDepthWiseConv(nn.Conv2d, FlexibleLayer):
         padding = self._kernel_size // 2
         final_conv = nn.Conv2d(C, C, self._kernel_size, stride=self.stride, padding=padding, groups=C, bias=self._bias)
         final_conv.weight.data.copy_(weight)
+        if self._bias:
+            final_conv.weight.data.copy_(self.bias)
         return final_conv
 
 
@@ -709,6 +718,7 @@ class FlexibleBatchNorm2d(nn.Module, FlexibleLayer):
         running_mean, running_var, weight, bias = self._select_params(self.mask)
         feature_dim = weight.shape[0]
         final_bn = nn.BatchNorm2d(feature_dim, self.flex_bn.eps, self.flex_bn.momentum, self.flex_bn.affine)
+        final_bn.num_batches_tracked = self.flex_bn.num_batches_tracked
         for var in ["running_mean", "running_var", "weight", "bias"]:
             getattr(final_bn, var).data.copy_(eval(var))
         return final_bn

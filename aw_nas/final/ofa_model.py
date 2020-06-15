@@ -17,26 +17,23 @@ from aw_nas.weights_manager.ofa_backbone import BaseBackboneArch
 
 class OFAGenotypeModel(FinalModel):
     NAME = "ofa_final_model"
-    def __init__(self, search_space, device, genotypes,
+    def __init__(self, search_space, device, genotypes=None,
                  backbone_type="mbv2_backbone",
                  backbone_cfg=None,
                  supernet_state_dict=None,
-                 num_classes=10,
                  filter_regex=None,
                  schedule_cfg=None):
         super(OFAGenotypeModel, self).__init__(schedule_cfg)
 
         self.search_space = search_space
         self.device = device
-        self.ofa_state_dict = ofa_state_dict
-        self.num_classes = num_classes
         self.backbone_cfg = backbone_cfg or {}
-        self.backbone_type = backbone_type
-        self.backbone_cfg = backbone_cfg
         
-        self.backbone = self.load_supernet_state_dict(supernet_state_dict, filter_regex)
+        self.backbone = BaseBackboneArch.get_class_(backbone_type)(
+            device=self.device, **backbone_cfg)
+        self.load_supernet_state_dict(supernet_state_dict, filter_regex)
         if genotypes:
-            self.finalize(supernet_state_dict, genotypes)
+            self.finalize(genotypes)
 
         self.to(self.device)
 
@@ -70,10 +67,8 @@ class OFAGenotypeModel(FinalModel):
         """
         supernet_state_dict includes all params and weights of FlexibileArch
         """
-        flexible_backbone = BaseBackboneArch.get_class_(self.backbone_type)(
-            device=self.device, **self.backbone_cfg)
-        if ofa_state_dict is not None:
-            if isinstance(ofa_state_dict, dict):
+        if supernet_state_dict is not None:
+            if isinstance(supernet_state_dict, dict):
                 state_dict = supernet_state_dict
             else:
                 state_dict = torch.load(supernet_state_dict, map_location="cpu")
@@ -81,11 +76,11 @@ class OFAGenotypeModel(FinalModel):
             if filter_regex is not None:
                 regex = re.compile(filter_regex)
                 state_dict = {k: v for k, v in state_dict.items() if not regex.match(k)}
-            flexible_backbone.load_state_dict(state_dict, strict=filter_regex is None)
-        return flexible_backbone
+            self.backbone.load_state_dict(state_dict, strict=filter_regex is None)
+        return self
 
     def finalize(self, genotypes, filter_regex=None):
-        assert isinstance(genotypes, str)
+        assert isinstance(genotypes, str), f"Type str excepted, got {type(genotypes)} instead."
         genotypes = list(genotype_from_str(genotypes, self.search_space)._asdict().values())
         depth, width, kernel = self.parse(genotypes)
 
