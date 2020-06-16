@@ -464,7 +464,7 @@ class MobileNetV2Arch(BaseBackboneArch):
         self.cells = nn.ModuleList(cells)
         return self
 
-    def get_features(self, inputs, p_levels, rollout=None, drop_connect_rate=0.0):
+    def extract_features(self, inputs, p_levels, rollout=None, drop_connect_rate=0.0):
         out = self.stem(inputs)
         level_indexes = feature_level_to_stage_index(self.strides)
         features = []
@@ -658,7 +658,7 @@ class MobileNetV3Arch(BaseBackboneArch):
         self.cells = nn.ModuleList(cells)
         return self
 
-    def get_features(self, inputs, p_levels, rollout=None, drop_connect_rate=0.0):
+    def extract_features(self, inputs, p_levels, rollout=None, drop_connect_rate=0.0):
         out = self.stem(inputs)
         level_indexes = feature_level_to_stage_index(self.strides)
         features = []

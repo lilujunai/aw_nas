@@ -83,7 +83,7 @@ class DetectionBackboneSupernet(BaseWeightsManager, nn.Module):
 
     
     def forward(self, inputs, rollout=None):
-        features, out = self.backbone.get_features(inputs, self.feature_levels, rollout)
+        features, out = self.backbone.extract_features(inputs, self.feature_levels, rollout)
         confidences, regression = self.head(features)
         return confidences, regression
 

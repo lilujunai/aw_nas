@@ -154,6 +154,6 @@ class SSDFinalModel(FinalModel):
         return ["image"]
 
     def forward(self, inputs):
-        features, feature = self.backbone.get_features(inputs, [4, 5])
+        features, feature = self.backbone.extract_features(inputs, [4, 5])
         confidences, locations = self.head(features)
         return confidences, locations

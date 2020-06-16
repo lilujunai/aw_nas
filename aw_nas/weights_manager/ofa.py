@@ -68,8 +68,8 @@ class OFASupernet(BaseWeightsManager, nn.Module):
     def forward(self, inputs, rollout=None):
         return self.backbone.forward_rollout(inputs, rollout)
 
-    def get_features(self, inputs, p_levels, rollout=None):
-        return self.backbone.get_features(inputs, p_levels, rollout)
+    def extract_features(self, inputs, p_levels, rollout=None):
+        return self.backbone.extract_features(inputs, p_levels, rollout)
 
     def set_hook(self):
         for name, module in self.named_modules():

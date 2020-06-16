@@ -242,7 +242,7 @@ class EfficientDetFinalModel(FinalModel):
 
     def forward(self, inputs): #pylint: disable=arguments-differ
         # 这一句话就可以表示中间层的feature？？我默认了
-        features, _ = self.backbone.get_features(inputs, self.feature_levels)
+        features, _ = self.backbone.extract_features(inputs, self.feature_levels)
         
         # 这里的输入是(p3, p4, p5)的feature map
         confidences, locations = self.head(features)

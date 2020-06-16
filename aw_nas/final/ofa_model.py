@@ -32,6 +32,7 @@ class OFAGenotypeModel(FinalModel):
         self.backbone = BaseBackboneArch.get_class_(backbone_type)(
             device=self.device, **backbone_cfg)
         self.load_supernet_state_dict(supernet_state_dict, filter_regex)
+        self.genotypes = genotypes
         if genotypes:
             self.finalize(genotypes)
 
@@ -76,7 +77,8 @@ class OFAGenotypeModel(FinalModel):
             if filter_regex is not None:
                 regex = re.compile(filter_regex)
                 state_dict = {k: v for k, v in state_dict.items() if not regex.match(k)}
-            self.backbone.load_state_dict(state_dict, strict=filter_regex is None)
+            mismatch = self.load_state_dict(state_dict, strict=filter_regex is None)     
+            self.logger.info("loading supernet: " + str(mismatch))
         return self
 
     def finalize(self, genotypes, filter_regex=None):

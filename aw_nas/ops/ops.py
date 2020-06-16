@@ -546,10 +546,7 @@ class FlexiblePointLinear(nn.Conv2d, FlexibleLayer):
         if out_mask is None:
             return self.weight[:, in_mask, :, :].contiguous(), self.bias
 
-        bias = None
-        if self._bias:
-            bias = self.bias[out_mask].contiguous()
-            
+        bias = None if not self._bias else self.bias[out_mask].contiguous()    
         if in_mask is None:
             return self.weight[out_mask, :, :, :].contiguous(), bias
         return self.weight[:, in_mask, :, :][out_mask, :, :, :].contiguous(), bias
@@ -601,7 +598,7 @@ class FlexibleDepthWiseConv(nn.Conv2d, FlexibleLayer):
         self._bias = bias
         
     def _select_channels(self, mask):
-        return self.weight[mask, :, :, :].contiguous()
+        return self.weight[mask, :, :, :].contiguous(), self.bias[mask].contiguous() if self.bias else None
 
     def _transform_kernel(self, origin_filter, kernel_size):
         expect(kernel_size in self.kernel_sizes, "The kernel_size must be one of {}, got {} instead".format(self.kernel_sizes, kernel_size), ValueError)
@@ -626,11 +623,12 @@ class FlexibleDepthWiseConv(nn.Conv2d, FlexibleLayer):
 
     def _select_params(self, mask, kernel_size):
         filters = self.weight
+        bias = self.bias
         if mask is not None:
-            filters = self._select_channels(mask)
+            filters, bias = self._select_channels(mask)
         if kernel_size:
             filters = self._transform_kernel(filters, kernel_size)
-        return filters
+        return filters, bias
 
     def set_mask(self, mask, kernel_size):
         self.mask = mask
@@ -641,10 +639,10 @@ class FlexibleDepthWiseConv(nn.Conv2d, FlexibleLayer):
         self._kernel_size = self.max_kernel_size
 
     def forward_mask(self, inputs, mask=None, kernel_size=None):
-        filters = self._select_params(mask, kernel_size)
+        filters, bias = self._select_params(mask, kernel_size)
         padding = filters.shape[-1] // 2
         groups = filters.shape[0]
-        return F.conv2d(inputs, filters, bias=self.bias, padding=padding, stride=self.stride, dilation=self.dilation, groups=groups)
+        return F.conv2d(inputs, filters, bias=bias, padding=padding, stride=self.stride, dilation=self.dilation, groups=groups)
 
     def forward(self, inputs):
         return self.forward_mask(inputs, self.mask, self._kernel_size)
@@ -653,13 +651,13 @@ class FlexibleDepthWiseConv(nn.Conv2d, FlexibleLayer):
         """
         The method should be called only after set_mask is called, or there will be no effect.
         """
-        weight = self._select_params(self.mask, self._kernel_size)
+        weight, bias = self._select_params(self.mask, self._kernel_size)
         C, _, _, _ = weight.shape
         padding = self._kernel_size // 2
         final_conv = nn.Conv2d(C, C, self._kernel_size, stride=self.stride, padding=padding, groups=C, bias=self._bias)
         final_conv.weight.data.copy_(weight)
         if self._bias:
-            final_conv.weight.data.copy_(self.bias)
+            final_conv.weight.data.copy_(bias)
         return final_conv
 
 
@@ -672,7 +670,7 @@ class FlexibleBatchNorm2d(nn.Module, FlexibleLayer):
     def _select_params(self, mask):
         if mask is not None:
             running_mean = self.flex_bn.running_mean[mask].contiguous()
-            running_var = self.flex_bn.running_mean[mask].contiguous()
+            running_var = self.flex_bn.running_var[mask].contiguous()
             weight = self.flex_bn.weight[mask].contiguous()
             bias = self.flex_bn.bias[mask].contiguous()
             return running_mean, running_var, weight, bias
@@ -719,6 +717,7 @@ class FlexibleBatchNorm2d(nn.Module, FlexibleLayer):
         feature_dim = weight.shape[0]
         final_bn = nn.BatchNorm2d(feature_dim, self.flex_bn.eps, self.flex_bn.momentum, self.flex_bn.affine)
         final_bn.num_batches_tracked = self.flex_bn.num_batches_tracked
+        final_bn.track_running_stats = torch.tensor(False)
         for var in ["running_mean", "running_var", "weight", "bias"]:
             getattr(final_bn, var).data.copy_(eval(var))
         return final_bn
