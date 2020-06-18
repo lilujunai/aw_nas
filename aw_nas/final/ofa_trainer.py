@@ -13,6 +13,9 @@ from aw_nas.utils.common_utils import nullcontext
 from aw_nas.utils.exception import expect
 from aw_nas.utils import DataParallel, DistributedDataParallel
 
+from aw_nas.utils.torch_utils import calib_bn
+
+
 try:
     from aw_nas.utils.SynchronizedBatchNormPyTorch.sync_batchnorm import (
         convert_model as convert_sync_bn,
@@ -51,6 +54,7 @@ class OFAFinalTrainer(FinalTrainer): #pylint: disable=too-many-instance-attribut
                  save_as_state_dict=False,
                  workers_per_queue=2,
                  eval_no_grad=True,
+                 calib_bn_setup=True,
                  schedule_cfg=None):
         super(OFAFinalTrainer, self).__init__(schedule_cfg)
 
@@ -79,6 +83,7 @@ class OFAFinalTrainer(FinalTrainer): #pylint: disable=too-many-instance-attribut
         self.add_regularization = add_regularization
         self.save_as_state_dict = save_as_state_dict
         self.eval_no_grad = eval_no_grad
+        self.calib_bn_setup = calib_bn_setup
 
         # for optimizer
         self.weight_decay = weight_decay
@@ -92,7 +97,7 @@ class OFAFinalTrainer(FinalTrainer): #pylint: disable=too-many-instance-attribut
         _splits = self.dataset.splits()
 
         train_kwargs = getattr(_splits["train"], "kwargs", {})
-        test_kwagrs = getattr(_splits["test"], "kwargs", {})
+        test_kwargs = getattr(_splits["test"], "kwargs", train_kwargs)
         if self.multiprocess:
             self.train_queue = torch.utils.data.DataLoader(
                 _splits["train"], batch_size=batch_size, pin_memory=True,
@@ -100,14 +105,14 @@ class OFAFinalTrainer(FinalTrainer): #pylint: disable=too-many-instance-attribut
                 sampler=DistributedSampler(_splits["train"], shuffle=True), **train_kwargs)
             self.valid_queue = torch.utils.data.DataLoader(
                 _splits["test"], batch_size=batch_size, pin_memory=True,
-                num_workers=workers_per_queue, shuffle=False, **train_kwargs)
+                num_workers=workers_per_queue, shuffle=False, **test_kwargs)
         else:
             self.train_queue = torch.utils.data.DataLoader(
                 _splits["train"], batch_size=batch_size, pin_memory=True,
                 num_workers=workers_per_queue, shuffle=True, **train_kwargs)
             self.valid_queue = torch.utils.data.DataLoader(
                 _splits["test"], batch_size=batch_size, pin_memory=True,
-                num_workers=workers_per_queue, shuffle=False, **train_kwargs)
+                num_workers=workers_per_queue, shuffle=False, **test_kwargs)
 
         if self.model is not None:
             self.optimizer = self._init_optimizer()
@@ -144,6 +149,9 @@ class OFAFinalTrainer(FinalTrainer): #pylint: disable=too-many-instance-attribut
                "when `save_every` is not None, make sure `train_dir` is not None")
 
         self._is_setup = True
+
+        if self.calib_bn_setup:
+            calib_bn(self.model, self.train_queue)
 
 
     def save(self, path):

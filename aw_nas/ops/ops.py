@@ -546,7 +546,7 @@ class FlexiblePointLinear(nn.Conv2d, FlexibleLayer):
         if out_mask is None:
             return self.weight[:, in_mask, :, :].contiguous(), self.bias
 
-        bias = None if not self._bias else self.bias[out_mask].contiguous()    
+        bias = None if not self._bias else self.bias[out_mask].contiguous()
         if in_mask is None:
             return self.weight[out_mask, :, :, :].contiguous(), bias
         return self.weight[:, in_mask, :, :][out_mask, :, :, :].contiguous(), bias
@@ -707,7 +707,7 @@ class FlexibleBatchNorm2d(nn.Module, FlexibleLayer):
             exponential_average_factor, self.flex_bn.eps)
 
     def forward(self, inputs):
-        return self.forward_mask(inputs, self.mask)
+        return self.forward_mask(inputs, self.mask) 
 
     def finalize(self):
         """
@@ -716,8 +716,6 @@ class FlexibleBatchNorm2d(nn.Module, FlexibleLayer):
         running_mean, running_var, weight, bias = self._select_params(self.mask)
         feature_dim = weight.shape[0]
         final_bn = nn.BatchNorm2d(feature_dim, self.flex_bn.eps, self.flex_bn.momentum, self.flex_bn.affine)
-        final_bn.num_batches_tracked = self.flex_bn.num_batches_tracked
-        final_bn.track_running_stats = torch.tensor(False)
         for var in ["running_mean", "running_var", "weight", "bias"]:
             getattr(final_bn, var).data.copy_(eval(var))
         return final_bn

@@ -1,3 +1,4 @@
+import copy
 import math
 from contextlib import contextmanager
 from functools import reduce
@@ -11,6 +12,7 @@ import torch.nn.functional as F
 import torch.utils.data
 from torch.optim.lr_scheduler import _LRScheduler
 
+from aw_nas.utils.common_utils import AverageMeter
 from aw_nas.utils.exception import expect
 from aw_nas.utils.lr_scheduler import get_scheduler_cls
 from torch.utils.data.distributed import DistributedSampler
@@ -728,3 +730,71 @@ def drop_connect(inputs, p, training):
     binary_tensor = torch.floor(random_tensor)
     output = inputs / keep_prob * binary_tensor
     return output
+
+
+def accumulate_bn(inputs, running_means, running_vars):
+    batch_size = inputs.shape[0]
+    batch_mean = inputs.mean(0, keepdim=True).mean(2, keepdim=True).mean(3, keepdim=True)  # 1, C, 1, 1
+    batch_var = (inputs - batch_mean) * (inputs - batch_mean)
+    batch_var = batch_var.mean(0, keepdim=True).mean(2, keepdim=True).mean(3, keepdim=True)
+    
+    batch_mean = torch.squeeze(batch_mean)
+    batch_var = torch.squeeze(batch_var)
+
+    running_means.update(batch_mean.data, batch_size)
+    running_vars.update(batch_var.data, batch_size)
+    return batch_mean, batch_var
+
+
+
+def calib_bn(model, data_queue, max_inputs=2000):
+    from aw_nas.ops import FlexibleBatchNorm2d
+    """
+    Adopted from once-for-all.
+    """
+    num_inputs = 0
+    bn_running_mean = {}
+    bn_running_var = {}
+
+    forward_model = copy.deepcopy(model)
+
+    def forward_factory(bn, running_means, running_vars):
+        def forward(inputs):
+            batch_mean, batch_var = accumulate_bn(inputs, running_means, running_vars)
+            if isinstance(bn, nn.BatchNorm2d):
+                # forward method of an instance of nn.BatchNorm2d in FlexibleBatchNorm will not be called
+                return F.batch_norm(
+                        inputs, batch_mean, batch_var, bn.weight,
+                        bn.bias, False,
+                        0.0, bn.eps,
+                    )
+            elif isinstance(bn, FlexibleBatchNorm2d):
+                return bn.forward_mask(inputs, bn.mask)
+            else:
+                raise ValueError
+        return forward
+
+    for name, m in forward_model.named_modules():
+        if not isinstance(m, (nn.BatchNorm2d, FlexibleBatchNorm2d)):
+            continue
+        bn_running_mean[name] = AverageMeter()
+        bn_running_var[name] = AverageMeter()
+        m._forward = m.forward
+        m.forward = forward_factory(m, bn_running_mean[name], bn_running_var[name])
+
+    with torch.no_grad():
+        num_inputs = 0
+        for inputs, _ in data_queue:
+            inputs = inputs.to(forward_model.device)
+            forward_model(inputs)
+            num_inputs += inputs.shape[0]
+            if num_inputs > max_inputs:
+                break
+    
+    for name, m in model.named_modules():
+        if name in bn_running_mean and not bn_running_mean[name].is_empty():
+            feature_dim = bn_running_mean[name].avg.shape[0]
+            assert isinstance(m, (nn.BatchNorm2d, FlexibleBatchNorm2d))
+            m.running_mean.data[:feature_dim].copy_(bn_running_mean[name].avg)
+            m.running_var.data[:feature_dim].copy_(bn_running_var[name].avg)
+    return model

@@ -613,7 +613,7 @@ def eval_arch(cfg_file, arch_file, load, gpu, seed, save_plot, save_state_dict, 
 
 @main.command(help="Derive architectures.")
 @click.argument("cfg_file", required=True, type=str)
-@click.option("--load", required=True, type=str,
+@click.option("--load", required=False, type=str,
               help="the directory to load checkpoint")
 @click.option("-o", "--out-file", required=True, type=str,
               help="the file to write the derived genotypes to")
@@ -677,8 +677,8 @@ def derive(cfg_file, load, out_file, n, save_plot, test, steps, gpu, seed, dump_
                 _dump(r, dump_mode, of)
                 of.write("\n")
     else:
-        trainer = _init_components_from_cfg(cfg, device, from_controller=True,
-                                            search_space=search_space, controller=controller)[-1]
+        trainer = _init_components_from_cfg(cfg, device)[-1]#, from_controller=True,
+                                            #search_space=search_space, controller=controller)[-1]
 
         LOGGER.info("Loading from disk...")
         trainer.setup(load=load)
@@ -696,7 +696,7 @@ def derive(cfg_file, load, out_file, n, save_plot, test, steps, gpu, seed, dump_
                     )
                 of.write("# ---- Arch {} (Reward {}) ----\n".format(i, rollout.get_perf()))
                 _dump(rollout, dump_mode, of)
-                yaml.safe_dump([{"reward": rollout.get_perf()}])
+                yaml.safe_dump([{"reward": rollout.get_perf()}], of)
                 of.write("\n")
 
 
