@@ -80,6 +80,5 @@ final_trainer_cfg:
   warmup_epochs: 0
   weight_decay: 0.0003
   save_as_state_dict: true
-  multiprocess: true
 # ---- End Type cnn_trainer ----
 ## ---- End Component final_trainer ----

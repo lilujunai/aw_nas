@@ -319,6 +319,9 @@ def mpsearch(cfg_file, seed, load, save_every, interleave_report_every,
     with open(cfg_file, "r") as f:
         cfg = yaml.safe_load(f)
 
+    cfg["weights_manager_cfg"]["multiprocess"] = True
+    cfg["evaluator_cfg"]["multiprocess"] = True
+
     # initialize components
     LOGGER.info("Initializing components.")
     whole_dataset = _init_component(cfg, "dataset")
@@ -758,6 +761,8 @@ def mptrain(seed, cfg_file, load, load_state_dict, save_every, train_dir):
     with open(cfg_file, "r") as f:
         cfg = yaml.safe_load(f)
 
+    cfg["final_trainer_cfg"]["multiprocess"] = True
+
     # initialize components
     LOGGER.info("Initializing components.")
     search_space = _init_component(cfg, "search_space")
@@ -897,8 +902,8 @@ def train(gpus, seed, cfg_file, load, load_state_dict, save_every, train_dir):
 @click.option("--seed", default=None, type=int,
               help="the random seed to run training")
 def test(cfg_file, load, load_state_dict, split, gpus, seed): #pylint: disable=redefined-builtin
-    assert (load is None) + (load_state_dict is None) == 1, \
-        "One and only one of `--load` and `--load-state-dict` arguments is required."
+    #assert (load is None) + (load_state_dict is None) == 1, \
+    #    "One and only one of `--load` and `--load-state-dict` arguments is required."
 
     setproctitle.setproctitle("awnas-test config: {}; load: {}; cwd: {}"\
                               .format(cfg_file, load, os.getcwd()))
@@ -934,7 +939,7 @@ def test(cfg_file, load, load_state_dict, split, gpus, seed): #pylint: disable=r
                               model=_init_component(
                                   cfg, "final_model",
                                   search_space=search_space,
-                                  device=device) if load_state_dict else None,
+                                  device=device),# if load_state_dict else None,
                               device=device,
                               gpus=gpu_list,
                               objective=objective)

@@ -78,7 +78,6 @@ evaluator_cfg:
   bptt_steps: 35
   schedule_cfg: null
   workers_per_queue: 8
-  multiprocess: true
 # ---- End Type mepa ----
 ## ---- End Component evaluator ----
 
@@ -112,7 +111,6 @@ weights_manager_cfg:
     # feature_channels: [40, 112, 320]
     pretrained_path: /home/tangchangcheng/scripts/efficient_head_d1_revised.pth
   num_classes: *num_classes
-  multiprocess: true
   
 # ---- End Type supernet ----
 ## ---- End Component weights_manager ----

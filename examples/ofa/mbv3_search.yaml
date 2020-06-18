@@ -72,17 +72,16 @@ evaluator_cfg:
   mepa_samples: 1
   data_portion:
   - 0.0
-  - 1.0 # train evaluator weights
-  - [test, 0.01] # for train controller
+  - [train, 1.0] # train evaluator weights
+  - [test, 0.1] # for train controller
   mepa_as_surrogate: false
   bptt_steps: 35
   schedule_cfg: null
-  multiprocess: true
 # ---- End Type mepa ----
 ## ---- End Component evaluator ----
 
 ## ---- Component weights_manager ----
-# ---- Type supernet ----
+# ---- Type supernet ----gal
 weights_manager_type: ofa_supernet
 weights_manager_cfg:
   # Schedulable attributes: 
@@ -98,7 +97,6 @@ weights_manager_cfg:
     num_classes: 1000
     block_type: mbv3_block
     pretrained_path: /home/tangchangcheng/scripts/ofa_supernet_flex.pt
-  multiprocess: true
 # ---- End Type supernet ----
 ## ---- End Component weights_manager ----
 

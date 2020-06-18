@@ -150,5 +150,4 @@ final_trainer_cfg:
   freeze_base_net: false
   base_net_lr: 0.00001
   save_as_state_dict: true
-  multiprocess: true
   eval_every: 20
