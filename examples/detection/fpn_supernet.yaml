@@ -125,14 +125,13 @@ final_model_cfg:
       mult_ratio: 1.
       kernel_sizes: [3, 5, 7]
       num_classes: 90
-  backbone_state_dict_path: null
+      pretrained_path: /home/tangchangcheng/scripts/ofa_supernet_flex.pt
   head_type: efficientdet_head_final_model
   head_cfg:
     channels: 88
     attention: True
     repeat: 4
     num_layers: 3
-  backbone_state_dict_path: /home/tangchangcheng/scripts/ofa_supernet_1.0.pt
 
 
 final_trainer_type: det_final_trainer
