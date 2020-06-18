@@ -26,6 +26,8 @@ class HeadModel(nn.Module):
         self.classification_headers = classification_headers
         if norm:
             self.norm = norm
+        else:
+            self.norm = None
         expect(None not in [extras, regression_headers, classification_headers], 'Extras, regression_headers and classification_headers must be provided, got None instead.', ConfigException)
 
         self._init_weights()
