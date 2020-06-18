@@ -35,7 +35,7 @@ class VggBlock(nn.Module):
 class MobileNetBlock(nn.Module):
     def __init__(self, expansion, C, C_out, stride, affine, kernel_size=3, relu6=False):
         super(MobileNetBlock, self).__init__()
-        C_inner = self.C_inner = int(expansion * C)
+        C_inner = self.C_inner = make_divisible(expansion * C, 8)
         self.stride = stride
         self.relu6 = relu6
         self.activation = F.relu6 if self.relu6 else F.relu
@@ -362,7 +362,7 @@ class MobileNetV3Block(nn.Module):
         self.expansion = expansion
         self.C = C
         self.C_out = C_out 
-        self.C_inner = C * expansion
+        self.C_inner = make_divisible(C * expansion, 8)
         self.stride = stride
         self.kernel_size = kernel_size
         self.act_fn = get_op(activation)(inplace=True)

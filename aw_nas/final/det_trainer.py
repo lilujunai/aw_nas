@@ -227,5 +227,6 @@ class DetectionFinalTrainer(OFAFinalTrainer): #pylint: disable=too-many-instance
                     self.logger.info("valid %03d %e %e;  %.2f%%; %.2f%%; %s", step, cls_objs.avg, loc_objs.avg, top1.avg, top5.avg,
                                      "; ".join(["{}: {:.3f}".format(perf_n, v) \
                                                 for perf_n, v in objective_perfs.avgs().items()]))
-        self.dataset.evaluate_detections(self.objective.all_boxes, self.eval_dir)
+        stats = self.dataset.evaluate_detections(self.objective.all_boxes, self.eval_dir)
+        self.logger.info(f"mAP: {stats[0]}")
         return top1.avg, cls_objs.avg + loc_objs.avg, objective_perfs.avgs()

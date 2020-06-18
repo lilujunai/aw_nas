@@ -50,8 +50,8 @@ class OFAGenotypeModel(FinalModel):
             self._flops_calculated = True
         return res
 
-    def get_features(self, inputs, p_levels=(4, 5), drop_connect_rate=0.0):
-        return self.backbone.get_features(inputs, p_levels, drop_connect_rate=drop_connect_rate)
+    def extract_features(self, inputs, p_levels=(4, 5), drop_connect_rate=0.0):
+        return self.backbone.extract_features(inputs, p_levels, drop_connect_rate=drop_connect_rate)
     
     def get_feature_channel_num(self, p_level):
         return self.backbone.get_feature_channel_num(p_level)

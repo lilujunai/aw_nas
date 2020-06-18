@@ -27,13 +27,13 @@ class FPNObjective(BaseObjective):
                  scales=[2 ** 0, 2 ** (1.0 / 3.0), 2 ** (2.0 / 3.0)],
                  ratios=[(1.0, 1.0), (1.4, 0.7), (0.7, 1.4)],
                  confidence_thresh=0.05,
-                 nms_threshold=0.5, schedule_cfg=None):
+                 nms_threshold=0.5, box_loss_coef=10.0, schedule_cfg=None):
         super(FPNObjective, self).__init__(search_space, schedule_cfg)
         self.num_classes = num_classes
 
         self.anchors = Anchors(pyramid_levels=pyramid_levels, scales=scales, ratios=ratios)
         self.target_transform = TargetTransform(0.5, num_classes)
-        self.focal_loss = FocalLoss()
+        self.focal_loss = FocalLoss(box_loss_coef=box_loss_coef)
         self.predictor = PredictModel(self.anchors, num_classes, top_k, confidence_thresh, nms_threshold)
 
         self.matched_target = []
@@ -254,10 +254,11 @@ class PredictModel(nn.Module):
 
 
 class FocalLossWithoutTransformer(nn.Module):
-    def __init__(self, alpha=0.25, gamma=2.0):
+    def __init__(self, alpha=0.25, gamma=2.0, box_loss_coef=10.0):
         super(FocalLossWithoutTransformer, self).__init__()
         self.alpha = alpha
         self.gamma = gamma
+        self.box_loss_coef = box_loss_coef
 
     def forward(self, predict, targets, anchors):
         alpha = self.alpha
@@ -319,7 +320,7 @@ class FocalLossWithoutTransformer(nn.Module):
             regression_losses.append(regression_loss.mean())
 
         return torch.stack(classification_losses).mean(dim=0, keepdim=True), \
-            torch.stack(regression_losses).mean(dim=0, keepdim=True)
+            self.box_loss_coef * torch.stack(regression_losses).mean(dim=0, keepdim=True)
 
 
 class Anchors(nn.Module):
@@ -422,10 +423,11 @@ class Anchors(nn.Module):
 
 
 class FocalLoss(nn.Module):
-    def __init__(self, alpha=0.25, gamma=2.0):
+    def __init__(self, alpha=0.25, gamma=2.0, box_loss_coef=10.0):
         super(FocalLoss, self).__init__()
         self.alpha = alpha
         self.gamma = gamma
+        self.box_loss_coef = box_loss_coef
 
     def forward(self, predictions, annotations, anchors):
         anchor, ctr_anchors = anchors
@@ -546,4 +548,4 @@ class FocalLoss(nn.Module):
                 regression_losses.append(torch.tensor(0).to(dtype).to(device))
 
         return torch.stack(classification_losses).mean(dim=0, keepdim=True), \
-               torch.stack(regression_losses).mean(dim=0, keepdim=True)
+               self.box_loss_coef * torch.stack(regression_losses).mean(dim=0, keepdim=True)

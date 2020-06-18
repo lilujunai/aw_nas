@@ -187,7 +187,7 @@ class EfficientDetFinalModel(FinalModel):
         self.num_classes = num_classes
         self.feature_levels = feature_levels
 
-        self.backbone = RegistryMeta.get_class('final_model', backbone_type)(search_space, device, num_classes=num_classes, schedule_cfg=schedule_cfg, **backbone_cfg)
+        self.backbone = RegistryMeta.get_class('final_model', backbone_type)(search_space, device, schedule_cfg=schedule_cfg, **backbone_cfg)
         if backbone_state_dict_path:
             self._load_base_net(backbone_state_dict_path)
 

@@ -88,8 +88,7 @@ class SSDFinalModel(FinalModel):
                  backbone_type,
                  backbone_cfg,
                  feature_levels=[4, 5],
-                 supernet_state_dict_path=None,
-                 #backbone_state_dict_path=None,
+                 supernet_state_dict=None,
                  head_type='ssd_head_final_model',
                  head_cfg={},
                  num_classes=10,
@@ -101,14 +100,14 @@ class SSDFinalModel(FinalModel):
         self.num_classes = num_classes
         self.feature_levels = feature_levels
 
-        genoptypes = backbone_cfg.pop("genotypes")
-        self.backbone = RegistryMeta.get_class('final_model', backbone_type)(search_space, device, num_classes=num_classes, **backbone_cfg)
+        genotypes = backbone_cfg.pop("genotypes")
+        self.backbone = RegistryMeta.get_class('final_model', backbone_type)(search_space, device, **backbone_cfg)
 
         feature_channels = self.backbone.get_feature_channel_num(feature_levels)
         self.head = SSDHeadFinalModel(device, num_classes, feature_channels, **head_cfg)
 
-        if supernet_state_dict_path:
-            self.load_supernet_state_dict(supernet_state_dict_path)
+        if supernet_state_dict:
+            self.load_supernet_state_dict(supernet_state_dict)
         self.finalize(genotypes)
 
         self.search_space = search_space
@@ -123,7 +122,7 @@ class SSDFinalModel(FinalModel):
         self.set_hook()
 
     def finalize(self, genotypes): 
-        self.backbone.finalize(*args, **kwargs)
+        self.backbone.finalize(genotypes)
         return self
 
     def load_supernet_state_dict(self, supernet_state_dict, strict=True):
