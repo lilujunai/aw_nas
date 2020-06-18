@@ -2,6 +2,7 @@
 """Base class definition of OFA Backbone."""
 
 import abc
+import copy
 
 import torch
 from torch import nn
@@ -453,6 +454,7 @@ class MobileNetV2Arch(BaseBackboneArch):
 
     def finalize(self, blocks, expansions, kernel_sizes):
         cells = []
+        finalized_model = copy.deepcopy(self)
         for i, cell in enumerate(self.cells):
             cells.append([])
             for j, block in enumerate(cell):
@@ -461,8 +463,8 @@ class MobileNetV2Arch(BaseBackboneArch):
                 block.set_mask(expansions[i][j], kernel_sizes[i][j])
                 cells[-1].append(block.finalize())
             cells[-1] = nn.ModuleList(cells[-1])
-        self.cells = nn.ModuleList(cells)
-        return self
+        finalized_model.cells = nn.ModuleList(cells)
+        return finalized_model
 
     def extract_features(self, inputs, p_levels, rollout=None, drop_connect_rate=0.0):
         out = self.stem(inputs)
@@ -647,6 +649,7 @@ class MobileNetV3Arch(BaseBackboneArch):
 
     def finalize(self, blocks, expansions, kernel_sizes):
         cells = []
+        finalized_model = copy.deepcopy(self)
         for i, cell in enumerate(self.cells):
             cells.append([])
             for j, block in enumerate(cell):
@@ -655,8 +658,8 @@ class MobileNetV3Arch(BaseBackboneArch):
                 block.set_mask(expansions[i][j], kernel_sizes[i][j])
                 cells[-1].append(block.finalize())
             cells[-1] = nn.ModuleList(cells[-1])
-        self.cells = nn.ModuleList(cells)
-        return self
+        finalized_model.cells = nn.ModuleList(cells)
+        return finalized_model
 
     def extract_features(self, inputs, p_levels, rollout=None, drop_connect_rate=0.0):
         out = self.stem(inputs)

@@ -755,7 +755,9 @@ def calib_bn(model, data_queue, max_inputs=2000):
     num_inputs = 0
     bn_running_mean = {}
     bn_running_var = {}
+    data_queue = iter(data_queue)
 
+    new_model = copy.deepcopy(model)
     forward_model = copy.deepcopy(model)
 
     def forward_factory(bn, running_means, running_vars):
@@ -779,22 +781,23 @@ def calib_bn(model, data_queue, max_inputs=2000):
             continue
         bn_running_mean[name] = AverageMeter()
         bn_running_var[name] = AverageMeter()
-        m._forward = m.forward
         m.forward = forward_factory(m, bn_running_mean[name], bn_running_var[name])
 
     with torch.no_grad():
         num_inputs = 0
         for inputs, _ in data_queue:
-            inputs = inputs.to(forward_model.device)
+            inputs = inputs.to(forward_model.get_device())
             forward_model(inputs)
             num_inputs += inputs.shape[0]
             if num_inputs > max_inputs:
                 break
     
-    for name, m in model.named_modules():
+    for name, m in new_model.named_modules():
         if name in bn_running_mean and not bn_running_mean[name].is_empty():
             feature_dim = bn_running_mean[name].avg.shape[0]
             assert isinstance(m, (nn.BatchNorm2d, FlexibleBatchNorm2d))
+            if hasattr(m, "flex_bn"):
+                m = m.flex_bn
             m.running_mean.data[:feature_dim].copy_(bn_running_mean[name].avg)
             m.running_var.data[:feature_dim].copy_(bn_running_var[name].avg)
-    return model
+    return new_model

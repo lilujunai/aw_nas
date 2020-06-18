@@ -126,6 +126,9 @@ class OFAFinalTrainer(FinalTrainer): #pylint: disable=too-many-instance-attribut
         self.train_dir = None
         self._is_setup = False
 
+        if self.calib_bn_setup:
+            self.model = calib_bn(self.model, self.train_queue)
+
     def setup(self, load=None, load_state_dict=None,
               save_every=None, train_dir=None, report_every=50):
         expect(not (load is not None and load_state_dict is not None),
@@ -149,9 +152,6 @@ class OFAFinalTrainer(FinalTrainer): #pylint: disable=too-many-instance-attribut
                "when `save_every` is not None, make sure `train_dir` is not None")
 
         self._is_setup = True
-
-        if self.calib_bn_setup:
-            calib_bn(self.model, self.train_queue)
 
 
     def save(self, path):
