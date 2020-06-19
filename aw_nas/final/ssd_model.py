@@ -129,7 +129,7 @@ class SSDFinalModel(FinalModel):
         model_state = torch.load(supernet_state_dict, "cpu")
         backbone_state = {k[9:]: v for k, v in model_state.items() if k.startswith("backbone")}
         head_state = {k[5:]: v for k, v in model_state.items() if k.startswith("head")}
-        self.backbone.load_supernet_state_dict(backbone_state, filter_regex=r"*classifier*")
+        self.backbone.load_supernet_state_dict(backbone_state, filter_regex=r".*classifier.*")
         self.head.load_state_dict(head_state, strict=strict)
         return self.backbone, self.head
         
