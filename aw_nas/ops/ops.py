@@ -34,17 +34,19 @@ class Hswish(nn.Module):
     def __init__(self, inplace):
         super(Hswish, self).__init__()
         self.inplace = inplace
+        self.relu6 = nn.ReLU6(inplace=inplace)
 
     def forward(self, x):
-        return x * F.relu6(x + 3., inplace=self.inplace) * (1 / 6.)
+        return x * self.relu6(x + 3) * (1 / 6.)
 
 class Hsigmoid(nn.Module):
     def __init__(self, inplace):
         super(Hsigmoid, self).__init__()
         self.inplace = inplace
+        self.relu6 = nn.ReLU6(inplace=inplace)
 
     def forward(self, x):
-        return F.relu6(x + 3., inplace=self.inplace) * (1 / 6.)
+        return self.relu6(x + 3.) * (1 / 6.)
 
 PRIMITVE_FACTORY = {
     "none" : lambda C, C_out, stride, affine: Zero(stride),
